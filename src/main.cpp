@@ -26,24 +26,23 @@ int main() {
     apriltag_detector* apriltagDetector = apriltag_detector_create();
     apriltag_detector_add_family(apriltagDetector, tag16h5_create());
 
-    apriltagDetector->quad_decimate = 0.1f;
-    apriltagDetector->quad_sigma = 0.8f;
+    apriltagDetector->quad_decimate = 0.2f;
+    apriltagDetector->quad_sigma = 0.0f;
     apriltagDetector->nthreads = 10;
     apriltagDetector->refine_edges = true;
 
     // 3D object-relative coordinates of the points on the tag
     // wraps counterclockwise
-    std::vector<cv::Point3f> objectPoints;
-    objectPoints.emplace_back(-tagsize / 2.0f, tagsize / 2.0f, 0.0f);
-    objectPoints.emplace_back(-tagsize / 2.0f, -tagsize / 2.0f, 0.0f);
-    objectPoints.emplace_back(tagsize / 2.0f, -tagsize / 2.0f, 0.0f);
-    objectPoints.emplace_back(tagsize / 2.0f, tagsize / 2.0f, 0.0f);
 
     cv::namedWindow("output");
 
     cv::Mat frame, gray;
     while(true) {
         camera.read(frame);
+        cv::Mat undistorted;
+        cv::undistort(frame, undistorted, cameraMatrix, distanceCoefficients);
+        undistorted.copyTo(frame);
+
         cv::cvtColor(frame, gray, cv::COLOR_BGR2GRAY);
 
         image_u8_t imHeader = {
@@ -78,7 +77,7 @@ int main() {
 
             std::string text = std::to_string(det->id);
             int fontface = cv::FONT_HERSHEY_SCRIPT_SIMPLEX;
-            double fontscale = 1.0;
+            double fontscale = 0.7;
             int baseline;
             cv::Size textsize = cv::getTextSize(text, fontface, fontscale, 2,
                                         &baseline);
@@ -100,7 +99,7 @@ int main() {
             double t_y = matd_get(pose.t, 1, 0);
             double t_z = matd_get(pose.t, 2, 0);
 
-            text += "(" + std::to_string(t_x) + ", " + std::to_string(t_y) + ", " + std::to_string(t_z) + "\n";
+            text += "(" + std::to_string(t_x) + ", " + std::to_string(t_y) + ", " + std::to_string(t_z) + ")";
 
             putText(frame, text, cv::Point(det->c[0]-textsize.width/2,
                                            det->c[1]+textsize.height/2),
