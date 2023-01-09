@@ -8,7 +8,7 @@ add_subdirectory(third_party/AprilTag)
 
 find_package(OpenCV REQUIRED)
 
-add_executable(AprilTagTest main.cpp)
+add_executable(AprilTagTest src/main.cpp)
 target_link_libraries(AprilTagTest PUBLIC ${OpenCV_LIBS} apriltag)
 target_include_directories(AprilTagTest PUBLIC ${OpenCV_INCLUDE_DIRS})
 
