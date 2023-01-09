@@ -31,9 +31,6 @@ int main() {
     apriltagDetector->nthreads = 10;
     apriltagDetector->refine_edges = true;
 
-    // 3D object-relative coordinates of the points on the tag
-    // wraps counterclockwise
-
     cv::namedWindow("output");
 
     cv::Mat frame, gray;
