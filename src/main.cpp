@@ -12,13 +12,13 @@ int main() {
     cv::VideoCapture camera(0);
     if(!camera.isOpened()) {
         std::cerr << "failed to open camera!!!" << std::endl;
-        std::exit(-1);
+        std::exit(EXIT_FAILURE);
     }
 
     cv::FileStorage fs;
     if(!fs.open("data/calibrations/calibration_info.yml", cv::FileStorage::READ)) {
         std::cerr << "failed to open data/calibrations/calibration_info.yml" << std::endl;
-        std::exit(-1);
+        std::exit(EXIT_FAILURE);
     }
     cv::Mat cameraMatrix = fs["camera_matrix"].mat();
     cv::Mat distanceCoefficients = fs["distance_coefficients"].mat();
