@@ -5,6 +5,7 @@ set(CMAKE_CXX_STANDARD 17)
 
 set(BUILD_PYTHON_WRAPPER OFF)
 add_subdirectory(third_party/AprilTag)
+add_subdirectory(third_party/argparse)
 
 find_package(OpenCV REQUIRED)
 
