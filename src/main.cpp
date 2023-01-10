@@ -5,7 +5,7 @@
 #include "tag16h5.h"
 #include "apriltag_pose.h"
 
-const float tagsize = 0.1524; // 6 inches -> meters
+constexpr float tagsize = 0.1524; // 6 inches -> meters
 
 int main() {
 
