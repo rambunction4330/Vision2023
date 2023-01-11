@@ -21,7 +21,7 @@ int main(int argc, const char **argv) {
     struct argparse argparse;
     argparse_init(&argparse, options, usages, 0);
     argparse_describe(&argparse, "\nA tool used to take images of your calibration chessboard",
-                      "\nBe sure to run this in the source directory containing the data/images folder. Press a to take a photo and q to quit");
+                      "\nBe sure to run this in the source directory containing the data folder. Press a to take a photo and q to quit");
     argc = argparse_parse(&argparse, argc, argv);
 
     cv::VideoCapture camera = cv::VideoCapture(0);
