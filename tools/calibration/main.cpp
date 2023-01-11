@@ -74,7 +74,7 @@ int main(int argc, const char** argv) {
 
     struct argparse argparse;
     argparse_init(&argparse, options, usages, 0);
-    argparse_describe(&argparse, "\n",
+    argparse_describe(&argparse, "used to generate a calibration file which contains the camera matrix and distance coefficients for the input camera\n",
                       "\nBe sure to run this in the source directory containing the data folder.");
     argc = argparse_parse(&argparse, argc, argv);
 
