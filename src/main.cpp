@@ -12,7 +12,7 @@ float sigma = 0.0f;
 int nthreads = 2;
 int cameraID = 0;
 bool noGUI = false;
-char* cameraName = "unamed";
+const char* cameraName = "noname";
 
 int main(int argc, const char** argv) {
     struct argparse_option options[] = {

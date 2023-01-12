@@ -114,7 +114,7 @@ int main(int argc, const char** argv) {
     cv::Mat cameraMatrix;
 
     std::cout << "calibrating camera..." << std::flush;
-    cv::calibrateCamera(objectPoints, imagePoints, chessboardSize, cameraMatrix, distanceCoefficients, rVectors, tVectors);
+    cv::calibrateCamera(objectPoints, imagePoints, images[0].size(), cameraMatrix, distanceCoefficients, rVectors, tVectors);
     std::cout << "done" << std::endl;
 
     cv::FileStorage fs;
