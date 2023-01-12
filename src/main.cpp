@@ -4,6 +4,7 @@
 #include <apriltag.h>
 #include "tag16h5.h"
 #include "apriltag_pose.h"
+
 #include "argparse.h"
 
 float tagsize = 0.1524; // 6 inches -> meters
@@ -41,14 +42,15 @@ int main(int argc, const char** argv) {
     cv::VideoCapture camera(cameraID);
     if(!camera.isOpened()) {
         std::cerr << "failed to open camera!!!" << std::endl;
-        std::exit(-1);
+        std::exit(EXIT_FAILURE);
     }
 
     cv::FileStorage fs;
+
     std::string configFilename = std::string("data/calibrations/") + cameraName + "_info.yml";
     if(!fs.open(configFilename, cv::FileStorage::READ)) {
         std::cerr << "failed to open " + configFilename << std::endl;
-        std::exit(-1);
+        std::exit(EXIT_FAILURE);
     }
     cv::Mat cameraMatrix = fs["camera_matrix"].mat();
     cv::Mat distanceCoefficients = fs["distance_coefficients"].mat();
