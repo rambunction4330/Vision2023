@@ -14,6 +14,7 @@
 #include "backends/imgui_impl_opengl3.h"
 
 #include <GLFW/glfw3.h>
+#include <opencv2/core/mat.hpp>
 
 
 class VisualizationSystem {
@@ -22,6 +23,22 @@ public:
 
     void init();
     void destruct();
+
+    void begin();
+    void end();
+
+    struct Texture {
+        int width, height;
+        unsigned int ID;
+    };
+
+    Texture createTexture();
+    void updateTexture(Texture* texture, const cv::Mat& mat);
+    void destroyTexture(Texture* texture);
+private:
+    GLFWwindow* m_window;
+
+    ImVec4 clearColor = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 };
 
 

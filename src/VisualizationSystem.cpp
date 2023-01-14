@@ -5,6 +5,7 @@
 #include "VisualizationSystem.h"
 
 #include <iostream>
+#include <opencv2/opencv.hpp>
 
 static void glfw_error_callback(int error, const char* description)
 {
@@ -43,13 +44,19 @@ void VisualizationSystem::init() {
 #endif
 
     // Create window with graphics context
-    GLFWwindow* window = glfwCreateWindow(1280, 720, "Dear ImGui GLFW+OpenGL3 example", NULL, NULL);
-    if (window == NULL) {
+    m_window = glfwCreateWindow(1280, 720, "Dear ImGui GLFW+OpenGL3 example", NULL, NULL);
+    if (m_window == NULL) {
         std::cerr << "failed to create GLFW window!" << std::endl;
         exit(1);
     }
-    glfwMakeContextCurrent(window);
+    glfwMakeContextCurrent(m_window);
     glfwSwapInterval(1); // Enable vsync
+
+    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
+    {
+        std::cout << "Failed to initialize GLAD" << std::endl;
+        exit(EXIT_FAILURE);
+    }
 
     // Setup Dear ImGui context
     IMGUI_CHECKVERSION();
@@ -65,10 +72,92 @@ void VisualizationSystem::init() {
     //ImGui::StyleColorsLight();
 
     // Setup Platform/Renderer backends
-    ImGui_ImplGlfw_InitForOpenGL(window, true);
+    ImGui_ImplGlfw_InitForOpenGL(m_window, true);
     ImGui_ImplOpenGL3_Init(glsl_version);
 }
 
-void VisualizationSystem::destruct() {
+void VisualizationSystem::begin() {
+    glfwMakeContextCurrent(m_window);
+    glfwPollEvents();
 
+    // Start the Dear ImGui frame
+    ImGui_ImplOpenGL3_NewFrame();
+    ImGui_ImplGlfw_NewFrame();
+    ImGui::NewFrame();
+}
+
+void VisualizationSystem::end() {
+    glfwMakeContextCurrent(m_window);
+    // Rendering
+    ImGui::Render();
+    int display_w = 0, display_h = 0;
+    glfwGetFramebufferSize(m_window, &display_w, &display_h);
+    glViewport(0, 0, display_w, display_h);
+    glClearColor(clearColor.x * clearColor.w, clearColor.y * clearColor.w, clearColor.z * clearColor.w, clearColor.w);
+    glClear(GL_COLOR_BUFFER_BIT);
+    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
+    ImGui::UpdatePlatformWindows();
+    ImGui::RenderPlatformWindowsDefault();
+
+    glfwSwapBuffers(m_window);
+}
+
+VisualizationSystem::Texture VisualizationSystem::createTexture() {
+    Texture texture{};
+    std::cout << glad_glGenTextures << std::endl;
+    glGenTextures(1, &texture.ID);
+    glBindTexture(GL_TEXTURE_2D, texture.ID);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    // Set texture clamping method
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+}
+
+void VisualizationSystem::updateTexture(VisualizationSystem::Texture *texture, const cv::Mat& image) {
+    cv::Mat rgbTemp;
+    cv::cvtColor(image, rgbTemp, cv::COLOR_BGR2RGB);
+
+    glBindTexture(GL_TEXTURE_2D, texture->ID);
+
+    if (texture->width != rgbTemp.cols || texture->height != rgbTemp.rows) {
+        glTexImage2D(GL_TEXTURE_2D,         // Type of texture
+                     0,                   // Pyramid level (for mip-mapping) - 0 is the top level
+                     GL_RGB,              // Internal colour format to convert to
+                     rgbTemp.cols,          // Image width  i.e. 640 for Kinect in standard mode
+                     rgbTemp.rows,          // Image height i.e. 480 for Kinect in standard mode
+                     0,                   // Border width in pixels (can either be 1 or 0)
+                     GL_RGB,              // Input image format (i.e. GL_RGB, GL_RGBA, GL_BGR etc.)
+                     GL_UNSIGNED_BYTE,    // Image data type
+                     rgbTemp.ptr());        // The actual image data itself
+    } else {
+        glTexSubImage2D(GL_TEXTURE_2D,
+                        0,
+                        GL_RGB,
+                        0,
+                        rgbTemp.cols,
+                        rgbTemp.rows,
+                        GL_RGB,
+                        GL_UNSIGNED_BYTE,
+                        rgbTemp.ptr()
+        );
+    }
+}
+
+void VisualizationSystem::destroyTexture(VisualizationSystem::Texture* texture) {
+    glDeleteTextures(1, &texture->ID);
+}
+
+void VisualizationSystem::destruct() {
+    glfwMakeContextCurrent(m_window);
+    // Cleanup
+    ImGui_ImplOpenGL3_Shutdown();
+    ImGui_ImplGlfw_Shutdown();
+    ImGui::DestroyContext();
+
+    glfwDestroyWindow(m_window);
+    glfwTerminate();
 }

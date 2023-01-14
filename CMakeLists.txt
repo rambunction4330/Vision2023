@@ -29,6 +29,7 @@ add_library(imgui
         third_party/imgui/backends/imgui_impl_opengl3.cpp
         )
 target_include_directories(imgui PUBLIC third_party/imgui)
+target_link_libraries(imgui PUBLIC glfw)
 
 # OpenGL
 find_package(OpenGL)
