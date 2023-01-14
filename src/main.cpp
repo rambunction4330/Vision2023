@@ -18,13 +18,13 @@ const char* cameraName = "noname";
 int main(int argc, const char** argv) {
     struct argparse_option options[] = {
             OPT_HELP(),
-            OPT_FLOAT(NULL, "tag-size", (void*)&tagsize, "width of apriltag in meters. WARNING: The default frc-standard value is 6 inches. Your tags should be 6 inches", NULL, 0, 0),
-            OPT_FLOAT(NULL, "decimate", (void*)&decimate, "decimation constant. See the frc/apriltag docs for more information", NULL, 0, 0),
-            OPT_FLOAT(NULL, "sigma", (void*)&sigma, "gaussian blur constant. See the frc/apriltag docs for more information", NULL, 0, 0),
+            OPT_FLOAT((char)NULL, "tag-size", (void*)&tagsize, "width of apriltag in meters. WARNING: The default frc-standard value is 6 inches. Your tags should be 6 inches", NULL, 0, 0),
+            OPT_FLOAT((char)NULL, "decimate", (void*)&decimate, "decimation constant. See the frc/apriltag docs for more information", NULL, 0, 0),
+            OPT_FLOAT((char)NULL, "sigma", (void*)&sigma, "gaussian blur constant. See the frc/apriltag docs for more information", NULL, 0, 0),
             OPT_INTEGER('j', "nthreads", (void*)&nthreads, "number of threads to run for apriltag detection", NULL, 0, 0),
-            OPT_INTEGER(NULL, "camera-id", (void*)&cameraID, "The ID of the webcam to use. Defaults to 0", NULL, 0, 0),
+            OPT_INTEGER((char)NULL, "camera-id", (void*)&cameraID, "The ID of the webcam to use. Defaults to 0", NULL, 0, 0),
             OPT_STRING('n', "name", (void*)&cameraName, "user-defined camera name", NULL, 0, 0),
-            OPT_BOOLEAN(NULL, "no-gui", (void*)&noGUI, "whether or not to disable GUI output for the program", NULL, 0, 0),
+            OPT_BOOLEAN((char)NULL, "no-gui", (void*)&noGUI, "whether or not to disable GUI output for the program", NULL, 0, 0),
             OPT_END(),
     };
 

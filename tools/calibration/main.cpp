@@ -38,7 +38,7 @@ static void compileChessboardCorners(const std::vector<std::filesystem::path> &i
                               std::vector<std::vector<cv::Point2f>> &imagePoints) {
     std::cout << "finding chessboard corners...";
     for(int i = 0; i < images.size(); i++) {
-        std::__1::vector<cv::Point2f> points;
+        std::vector<cv::Point2f> points;
         bool found = cv::findChessboardCorners(images[i], chessboardSize, points);
 
         if(!found) {
