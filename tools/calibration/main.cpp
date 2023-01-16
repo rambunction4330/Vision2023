@@ -7,6 +7,8 @@
 #include <filesystem>
 #include <argparse.h>
 
+#include <vector>
+
 cv::Size chessboardSize(9, 6);
 float chessboardSquareSize = 0.015;
 const std::string filenameBase = "data/calibrations/";
