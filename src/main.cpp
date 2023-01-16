@@ -75,7 +75,6 @@ int main(int argc, const char **argv) {
     VisualizationSystem guiSystem;
     VisualizationSystem::Texture cameraTexture;
     if (!noGUI) {
-//        cv::namedWindow("output");
         guiSystem.init();
         cameraTexture = guiSystem.createTexture();
     }
@@ -98,15 +97,13 @@ int main(int argc, const char **argv) {
 
         zarray_t *detections = apriltag_detector_detect(apriltagDetector, &imHeader);
 
-        // Draw detection outlines
-
         if (!noGUI) {
             guiSystem.begin();
             ImGui::DockSpaceOverViewport();
-            ImGui::Begin("Camera");
         }
 
         // Draw detection outlines
+        ImGui::Begin("Info");
         for (int i = 0; i < zarray_size(detections); i++) {
             apriltag_detection_t *det;
             zarray_get(detections, i, &det);
@@ -148,6 +145,24 @@ int main(int argc, const char **argv) {
             double t_y = matd_get(pose.t, 1, 0);
             double t_z = matd_get(pose.t, 2, 0);
 
+            cv::Mat RMat = cv::Mat(pose.R->nrows, pose.R->ncols, CV_64F, pose.R->data);
+
+            double thetaX;
+            double thetaY;
+            double thetaZ;
+            {
+                double r32 = RMat.at<double>(2, 1);
+                double r33 = RMat.at<double>(2, 2);
+                double r31 = RMat.at<double>(2, 0);
+                double r21 = RMat.at<double>(1, 0);
+                double r11 = RMat.at<double>(0, 0);
+
+                thetaX = std::atan2(r32, r33);
+                thetaY = std::atan2(-r31, std::sqrt(r32 * r32 + r33 * r33));
+                thetaZ = std::atan2(r21, r11);
+            }
+
+
             if(!noGUI) {
                 int fontface = cv::FONT_HERSHEY_SCRIPT_SIMPLEX;
 
@@ -160,12 +175,20 @@ int main(int argc, const char **argv) {
                 putText(frame, text, cv::Point(det->c[0] - textsize.width / 2,
                                                det->c[1] + textsize.height / 2),
                         fontface, fontscale, cv::Scalar(0xff, 0x99, 0), 2);
+
+                if(ImGui::CollapsingHeader((std::string("TAG_") + std::to_string(det->id)).c_str())) {
+                    ImGui::Text("POSITION: (%f, %f, %f)", t_x, t_y, t_z);
+                    ImGui::Text("ROTATION: (%f, %f, %f)", thetaX * (180.0 / M_PI), thetaY * (180.0 / M_PI), thetaZ * (180.0 / M_PI));
+                }
             }
 
+
         }
+        ImGui::End();
 
 
         if (!noGUI) {
+            ImGui::Begin("Camera");
             guiSystem.updateTexture(&cameraTexture, frame);
             ImGui::Image((ImTextureID) cameraTexture.ID, ImGui::GetContentRegionAvail());
 
