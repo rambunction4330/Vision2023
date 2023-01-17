@@ -213,9 +213,26 @@ int main(int argc, const char **argv) {
             guiSystem.updateTexture(&cameraTexture, frame);
             ImGui::Image((ImTextureID) cameraTexture.ID, ImGui::GetContentRegionAvail());
 
-            if (!noGUI) {
-                ImGui::End();
+            ImGui::End();
+
+            ImGui::Begin("Settings");
+
+            bool settingsModified = false;
+            if(ImGui::SliderFloat("quad-decimate", &decimate, 0.0f, 1.0f)) {
+                settingsModified = true;
+                apriltagDetector->quad_decimate = decimate;
             }
+
+            if(ImGui::SliderFloat("sigma", &sigma, 0.0f, 1.0f)) {
+               settingsModified = true;
+               apriltagDetector->quad_sigma = sigma;
+            }
+
+            if(settingsModified) {
+                // stuff
+            }
+
+            ImGui::End();
 
             ImGui::Begin("Camera Position Estimation");
             if(numDetections) {
