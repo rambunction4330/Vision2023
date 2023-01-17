@@ -11,7 +11,7 @@ find_package(OpenCV REQUIRED)
 
 add_executable(vision src/main.cpp src/VisualizationSystem.cpp src/VisualizationSystem.h src/FieldData.cpp src/FieldData.h)
 target_link_libraries(vision PUBLIC ${OpenCV_LIBS} apriltag argparse)
-target_include_directories(vision PUBLIC ${OpenCV_INCLUDE_DIRS})
+target_include_directories(vision PUBLIC ${OpenCV_INCLUDE_DIRS} src)
 
 add_subdirectory(tools/calibration)
 add_subdirectory(tools/camera)
@@ -34,4 +34,8 @@ target_link_libraries(imgui PUBLIC glfw)
 # OpenGL
 find_package(OpenGL)
 
-target_link_libraries(vision PUBLIC imgui glfw glad OpenGL::GL)
+# INCBIN
+add_library(incbin STATIC third_party/incbin/incbin.c)
+target_include_directories(incbin PUBLIC third_party/incbin)
+
+target_link_libraries(vision PUBLIC imgui glfw glad OpenGL::GL incbin)

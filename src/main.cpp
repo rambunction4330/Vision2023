@@ -9,6 +9,10 @@
 #include "VisualizationSystem.h"
 #include "FieldData.h"
 
+#include "incbin.h"
+
+INCBIN(FieldImage, "assets/field23.png");
+
 float tagsize = 0.1524; // 6 inches -> meters
 float decimate = 0.2f;
 float sigma = 0.0f;
@@ -16,6 +20,9 @@ int nthreads = 2;
 int cameraID = 0;
 bool noGUI = false;
 const char *cameraName = "noname";
+
+const double fieldLength = 16.535239036755;
+const double fieldHeight = 8.0137;
 
 static void drawDebugInfo(cv::Mat& frame, apriltag_detection* det) {
     line(frame, cv::Point(det->p[0][0], det->p[0][1]),
@@ -109,9 +116,17 @@ int main(int argc, const char **argv) {
 
     VisualizationSystem guiSystem;
     VisualizationSystem::Texture cameraTexture;
+    VisualizationSystem::Texture fieldTexture;
+    cv::Mat fieldImageMatDefaultData;
     if (!noGUI) {
         guiSystem.init();
+
         cameraTexture = guiSystem.createTexture();
+        fieldTexture = guiSystem.createTexture();
+
+
+        // load field image
+        fieldImageMatDefaultData = cv::imdecode(std::vector<unsigned char>(gFieldImageData, gFieldImageData + gFieldImageSize), cv::IMREAD_UNCHANGED);
     }
 
     cv::Mat frame, gray;
@@ -190,8 +205,10 @@ int main(int argc, const char **argv) {
         }
 
         cv::Mat rvec, tvec, cameraPosition;
+        cv::Mat fieldImageAnnotated;
+
         if(numDetections > 0) {
-            cv::solvePnP(objectPoints, imagePoints, cameraMatrix, distortionCoefficients, rvec, tvec);
+            cv::solvePnPRansac(objectPoints, imagePoints, cameraMatrix, distortionCoefficients, rvec, tvec);
             std::vector<cv::Point2d> outPoints;
             cv::projectPoints(objectPoints, rvec, tvec, cameraMatrix, distortionCoefficients, outPoints);
 
@@ -199,24 +216,45 @@ int main(int argc, const char **argv) {
             cv::Rodrigues(rvec, rotMat);
             cameraPosition = -rotMat.inv() * tvec;
 
-            int pointIndex = 0;
-            for(auto& point : outPoints) {
-                cv::circle(frame, point, 5, cv::Scalar(0, 0, 0xff), -1);
-                cv::putText(frame, std::to_string(pointIndex), point, cv::FONT_HERSHEY_COMPLEX, 1.0f, cv::Scalar(0, 0xff, 0));
-                pointIndex++;
+            if(!noGUI) {
+                int pointIndex = 0;
+                for (auto &point: outPoints) {
+                    cv::circle(frame, point, 5, cv::Scalar(0, 0, 0xff), -1);
+                    cv::putText(frame, std::to_string(pointIndex), point, cv::FONT_HERSHEY_COMPLEX, 1.0f,
+                                cv::Scalar(0, 0xff, 0));
+                    pointIndex++;
+                }
             }
-        }
 
+        }
 
         if (!noGUI) {
             ImGui::Begin("Camera");
             guiSystem.updateTexture(&cameraTexture, frame);
             ImGui::Image((ImTextureID) cameraTexture.ID, ImGui::GetContentRegionAvail());
+            ImGui::End();
 
+            ImGui::Begin("Field Diagram");
+            fieldImageMatDefaultData.copyTo(fieldImageAnnotated);
+            if(numDetections) {
+                // draw the robot's position
+                int imageWidth = fieldImageAnnotated.cols;
+                int imageHeight = fieldImageAnnotated.rows;
+
+                int xPosition = (int) ((float) imageWidth * (cameraPosition.at<double>(0, 0) / (float) fieldLength));
+                int yPosition = imageHeight -
+                                (int) ((float) imageHeight * (cameraPosition.at<double>(0, 1) / (float) fieldHeight));
+                std::stringstream stringstream;
+                stringstream << cv::Point(xPosition, yPosition);
+                ImGui::Text("%s", stringstream.str().c_str());
+                cv::circle(fieldImageAnnotated, cv::Point(xPosition, yPosition), 20, cv::Scalar(0xff, 0, 0xff), -1);
+
+            }
+            guiSystem.updateTexture(&fieldTexture, fieldImageAnnotated);
+            ImGui::Image((void *) fieldTexture.ID, ImGui::GetContentRegionAvail());
             ImGui::End();
 
             ImGui::Begin("Settings");
-
             bool settingsModified = false;
             if(ImGui::SliderFloat("quad-decimate", &decimate, 0.0f, 1.0f)) {
                 settingsModified = true;
@@ -227,11 +265,6 @@ int main(int argc, const char **argv) {
                settingsModified = true;
                apriltagDetector->quad_sigma = sigma;
             }
-
-            if(settingsModified) {
-                // stuff
-            }
-
             ImGui::End();
 
             ImGui::Begin("Camera Position Estimation");
