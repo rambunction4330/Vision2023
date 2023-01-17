@@ -7,6 +7,7 @@
 
 #include "argparse.h"
 #include "VisualizationSystem.h"
+#include "FieldData.h"
 
 float tagsize = 0.1524; // 6 inches -> meters
 float decimate = 0.2f;
@@ -15,6 +16,40 @@ int nthreads = 2;
 int cameraID = 0;
 bool noGUI = false;
 const char *cameraName = "noname";
+
+static void drawDebugInfo(cv::Mat& frame, apriltag_detection* det) {
+    line(frame, cv::Point(det->p[0][0], det->p[0][1]),
+         cv::Point(det->p[1][0], det->p[1][1]),
+         cv::Scalar(0, 0xff, 0), 2);
+    line(frame, cv::Point(det->p[0][0], det->p[0][1]),
+         cv::Point(det->p[3][0], det->p[3][1]),
+         cv::Scalar(0, 0, 0xff), 2);
+    line(frame, cv::Point(det->p[1][0], det->p[1][1]),
+         cv::Point(det->p[2][0], det->p[2][1]),
+         cv::Scalar(0xff, 0, 0), 2);
+    line(frame, cv::Point(det->p[2][0], det->p[2][1]),
+         cv::Point(det->p[3][0], det->p[3][1]),
+         cv::Scalar(0xff, 0, 0), 2);
+
+    std::string text = std::to_string(det->id);
+
+    int fontface = cv::FONT_HERSHEY_SCRIPT_SIMPLEX;
+
+    double fontscale = 0.7;
+    int baseline;
+    cv::Size textsize = cv::getTextSize(text, fontface, fontscale, 2,
+                                        &baseline);
+
+    putText(frame, text, cv::Point(det->c[0] - textsize.width / 2,
+                                   det->c[1] + textsize.height / 2),
+            fontface, fontscale, cv::Scalar(0xff, 0x99, 0), 2);
+}
+
+static void undistortImage(cv::Mat& frame, cv::Mat cameraMatrix, cv::InputArray distanceCoefficients) {
+    cv::Mat temp;
+    cv::undistort(frame, temp, cameraMatrix, distanceCoefficients);
+    temp.copyTo(frame);
+}
 
 int main(int argc, const char **argv) {
     struct argparse_option options[] = {
@@ -62,7 +97,7 @@ int main(int argc, const char **argv) {
         std::exit(EXIT_FAILURE);
     }
     cv::Mat cameraMatrix = fs["camera_matrix"].mat();
-    cv::Mat distanceCoefficients = fs["distance_coefficients"].mat();
+    cv::Mat distortionCoefficients = fs["distance_coefficients"].mat();
 
     apriltag_detector *apriltagDetector = apriltag_detector_create();
     apriltag_detector_add_family(apriltagDetector, tag16h5_create());
@@ -80,11 +115,14 @@ int main(int argc, const char **argv) {
     }
 
     cv::Mat frame, gray;
-    while (true) {
+    
+    uint32_t detectedTagsBits = 0;
+    std::vector<cv::Point2d> imagePoints;
+    std::vector<cv::Point3d> objectPoints;
+
+    while (noGUI || !guiSystem.windowShouldClose()) {
         camera.read(frame);
-        cv::Mat undistorted;
-        cv::undistort(frame, undistorted, cameraMatrix, distanceCoefficients);
-        undistorted.copyTo(frame);
+        undistortImage(frame, cameraMatrix, distortionCoefficients);
 
         cv::cvtColor(frame, gray, cv::COLOR_BGR2GRAY);
 
@@ -95,6 +133,7 @@ int main(int argc, const char **argv) {
                 .buf = gray.data
         };
 
+        detectedTagsBits = 0;
         zarray_t *detections = apriltag_detector_detect(apriltagDetector, &imHeader);
 
         if (!noGUI) {
@@ -102,89 +141,71 @@ int main(int argc, const char **argv) {
             ImGui::DockSpaceOverViewport();
         }
 
-        // Draw detection outlines
-        ImGui::Begin("Info");
+        // We shouldn't be iterating over more than 8 detections because there are only 8 in the field
+        // In fact, realistically, the number shouldn't be more than 4 as the camera shouldn't have 360 degree vision
+        int numDetections = 0;
+        int currentImageIndex = 0;
+        imagePoints.clear();
+        objectPoints.clear();
         for (int i = 0; i < zarray_size(detections); i++) {
             apriltag_detection_t *det;
             zarray_get(detections, i, &det);
-
-            if(det->id > 8)
+            
+            if(det->id > 8) {
+//                std::cerr << "WARNING: A tag of id " << det->id << " detected but should not be on the game field!" << std::endl;
                 continue;
-
-            std::string text = "";
-            if(!noGUI) {
-                line(frame, cv::Point(det->p[0][0], det->p[0][1]),
-                     cv::Point(det->p[1][0], det->p[1][1]),
-                     cv::Scalar(0, 0xff, 0), 2);
-                line(frame, cv::Point(det->p[0][0], det->p[0][1]),
-                     cv::Point(det->p[3][0], det->p[3][1]),
-                     cv::Scalar(0, 0, 0xff), 2);
-                line(frame, cv::Point(det->p[1][0], det->p[1][1]),
-                     cv::Point(det->p[2][0], det->p[2][1]),
-                     cv::Scalar(0xff, 0, 0), 2);
-                line(frame, cv::Point(det->p[2][0], det->p[2][1]),
-                     cv::Point(det->p[3][0], det->p[3][1]),
-                     cv::Scalar(0xff, 0, 0), 2);
-
-                text = std::to_string(det->id);
+            }
+            
+            if(detectedTagsBits & (1 << det->id)) {
+                std::cerr << "WARNING: multiple tags of id " << det->id << " found!" << std::endl;
+                continue;
+            } else {
+                detectedTagsBits |= (1 << det->id);
             }
 
-            apriltag_detection_info_t info;
-            info.det = det;
-            info.tagsize = tagsize;
-            info.fx = cameraMatrix.at<double>(0, 0);
-            info.fy = cameraMatrix.at<double>(1, 1);
-            info.cx = cameraMatrix.at<double>(0, 2);
-            info.cy = cameraMatrix.at<double>(1, 2);
+            // the tags between 5 and 8 are all rotated 180 degrees compared to the ones with ids 1 through 4
+            // so we need to account for this my multiplying the y direction offset of the corner from the center by -1
+            int fieldOrientationMultiplier = det->id <= 4 && det->id >=0 ? 1 : -1;
+            double centerToEdge = inToM(3.0); // perpendicular distance from center of apriltag to edge is 3 inches
 
-
-            apriltag_pose_t pose;
-            double err = estimate_tag_pose(&info, &pose);
-
-            double t_x = matd_get(pose.t, 0, 0);
-            double t_y = matd_get(pose.t, 1, 0);
-            double t_z = matd_get(pose.t, 2, 0);
-
-            cv::Mat RMat = cv::Mat(pose.R->nrows, pose.R->ncols, CV_64F, pose.R->data);
-
-            double thetaX;
-            double thetaY;
-            double thetaZ;
-            {
-                double r32 = RMat.at<double>(2, 1);
-                double r33 = RMat.at<double>(2, 2);
-                double r31 = RMat.at<double>(2, 0);
-                double r21 = RMat.at<double>(1, 0);
-                double r11 = RMat.at<double>(0, 0);
-
-                thetaX = std::atan2(r32, r33);
-                thetaY = std::atan2(-r31, std::sqrt(r32 * r32 + r33 * r33));
-                thetaZ = std::atan2(r21, r11);
+            // construct image and object points
+            for(int j = 0; j < 4; j++) {
+                imagePoints.emplace_back();
+                objectPoints.emplace_back();
             }
-
+            imagePoints[currentImageIndex * 4 + 0] = cv::Point2d(det->p[0][0], det->p[0][1]);
+            objectPoints[currentImageIndex * 4 + 0] = aprilTagFieldPoints[det->id] + cv::Point3d(0.0, fieldOrientationMultiplier * centerToEdge, -centerToEdge);
+            imagePoints[currentImageIndex * 4 + 1] = cv::Point2d(det->p[1][0], det->p[1][1]);
+            objectPoints[currentImageIndex * 4 + 1] = aprilTagFieldPoints[det->id] + cv::Point3d(0.0, -fieldOrientationMultiplier * centerToEdge, -centerToEdge);
+            imagePoints[currentImageIndex * 4 + 2] = cv::Point2d(det->p[2][0], det->p[2][1]);
+            objectPoints[currentImageIndex * 4 + 2] = aprilTagFieldPoints[det->id] + cv::Point3d(0.0, -fieldOrientationMultiplier * centerToEdge, centerToEdge);
+            imagePoints[currentImageIndex * 4 + 3] = cv::Point2d(det->p[3][0], det->p[3][1]);
+            objectPoints[currentImageIndex * 4 + 3] = aprilTagFieldPoints[det->id] + cv::Point3d(0.0, fieldOrientationMultiplier * centerToEdge, centerToEdge);
 
             if(!noGUI) {
-                int fontface = cv::FONT_HERSHEY_SCRIPT_SIMPLEX;
-
-                double fontscale = 0.7;
-                int baseline;
-                cv::Size textsize = cv::getTextSize(text, fontface, fontscale, 2,
-                                                    &baseline);
-                text += "(" + std::to_string(t_x) + ", " + std::to_string(t_y) + ", " + std::to_string(t_z) + ")";
-
-                putText(frame, text, cv::Point(det->c[0] - textsize.width / 2,
-                                               det->c[1] + textsize.height / 2),
-                        fontface, fontscale, cv::Scalar(0xff, 0x99, 0), 2);
-
-                if(ImGui::CollapsingHeader((std::string("TAG_") + std::to_string(det->id)).c_str())) {
-                    ImGui::Text("POSITION: (%f, %f, %f)", t_x, t_y, t_z);
-                    ImGui::Text("ROTATION: (%f, %f, %f)", thetaX * (180.0 / M_PI), thetaY * (180.0 / M_PI), thetaZ * (180.0 / M_PI));
-                }
+                drawDebugInfo(frame, det);
             }
-
-
+            currentImageIndex++;
+            numDetections++;
         }
-        ImGui::End();
+
+        cv::Mat rvec, tvec, cameraPosition;
+        if(numDetections > 0) {
+            cv::solvePnP(objectPoints, imagePoints, cameraMatrix, distortionCoefficients, rvec, tvec);
+            std::vector<cv::Point2d> outPoints;
+            cv::projectPoints(objectPoints, rvec, tvec, cameraMatrix, distortionCoefficients, outPoints);
+
+            cv::Mat rotMat;
+            cv::Rodrigues(rvec, rotMat);
+            cameraPosition = -rotMat.inv() * tvec;
+
+            int pointIndex = 0;
+            for(auto& point : outPoints) {
+                cv::circle(frame, point, 5, cv::Scalar(0, 0, 0xff), -1);
+                cv::putText(frame, std::to_string(pointIndex), point, cv::FONT_HERSHEY_COMPLEX, 1.0f, cv::Scalar(0, 0xff, 0));
+                pointIndex++;
+            }
+        }
 
 
         if (!noGUI) {
@@ -195,10 +216,21 @@ int main(int argc, const char **argv) {
             if (!noGUI) {
                 ImGui::End();
             }
+
+            ImGui::Begin("Camera Position Estimation");
+            if(numDetections) {
+                std::stringstream ss;
+                ss << cameraPosition * 39.3701;
+
+                ImGui::Text("%s", ss.str().c_str());
+            }
+            ImGui::End();
+
             guiSystem.end();
         }
 
         apriltag_detections_destroy(detections);
+
 
         if (cv::waitKey(1) == 'q') {
             break;

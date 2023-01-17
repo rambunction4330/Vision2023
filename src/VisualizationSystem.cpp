@@ -105,7 +105,6 @@ void VisualizationSystem::end() {
 
 VisualizationSystem::Texture VisualizationSystem::createTexture() {
     Texture texture{};
-    std::cout << glad_glGenTextures << std::endl;
     glGenTextures(1, &texture.ID);
     glBindTexture(GL_TEXTURE_2D, texture.ID);
 
@@ -115,6 +114,7 @@ VisualizationSystem::Texture VisualizationSystem::createTexture() {
     // Set texture clamping method
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    return texture;
 }
 
 void VisualizationSystem::updateTexture(VisualizationSystem::Texture *texture, const cv::Mat& image) {

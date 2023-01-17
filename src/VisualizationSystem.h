@@ -35,6 +35,8 @@ public:
     Texture createTexture();
     void updateTexture(Texture* texture, const cv::Mat& mat);
     void destroyTexture(Texture* texture);
+
+    bool windowShouldClose() { return glfwWindowShouldClose(m_window); }
 private:
     GLFWwindow* m_window;
 
