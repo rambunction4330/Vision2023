@@ -13,6 +13,13 @@
 
 INCBIN(FieldImage, "assets/field23.png");
 
+enum POSE_ESTIM_ALGO {
+    OPENCV,
+    APRILTAG
+};
+
+POSE_ESTIM_ALGO preferredAlgorithm = APRILTAG;
+
 float tagsize = 0.1524; // 6 inches -> meters
 float decimate = 0.2f;
 float sigma = 0.0f;
@@ -113,6 +120,7 @@ int main(int argc, const char **argv) {
     apriltagDetector->quad_sigma = sigma;
     apriltagDetector->nthreads = nthreads;
     apriltagDetector->refine_edges = true;
+    apriltagDetector->decode_sharpening = 0.40;
 
     VisualizationSystem guiSystem;
     VisualizationSystem::Texture cameraTexture;
@@ -134,6 +142,7 @@ int main(int argc, const char **argv) {
     uint32_t detectedTagsBits = 0;
     std::vector<cv::Point2d> imagePoints;
     std::vector<cv::Point3d> objectPoints;
+    std::vector<cv::Point3d> cameraPositionEstimations;
 
     while (noGUI || !guiSystem.windowShouldClose()) {
         camera.read(frame);
@@ -159,16 +168,26 @@ int main(int argc, const char **argv) {
         // We shouldn't be iterating over more than 8 detections because there are only 8 in the field
         // In fact, realistically, the number shouldn't be more than 4 as the camera shouldn't have 360 degree vision
         int numDetections = 0;
-        int currentImageIndex = 0;
+        int currentTagIndex = 0;
         imagePoints.clear();
         objectPoints.clear();
+        cameraPositionEstimations.clear();
+        ImGui::Begin("Algorithm Debug");
         for (int i = 0; i < zarray_size(detections); i++) {
             apriltag_detection_t *det;
             zarray_get(detections, i, &det);
             
-            if(det->id > 8) {
+            if(det->id <= 0 || det->id > 8) {
 //                std::cerr << "WARNING: A tag of id " << det->id << " detected but should not be on the game field!" << std::endl;
                 continue;
+            }
+
+            if(det->decision_margin < 30) {
+                continue;
+            }
+
+            if(det->hamming > 0) {
+                std::cout << "sketchy tag of id " << det->id << " discarded" << std::endl;
             }
             
             if(detectedTagsBits & (1 << det->id)) {
@@ -178,54 +197,120 @@ int main(int argc, const char **argv) {
                 detectedTagsBits |= (1 << det->id);
             }
 
-            // the tags between 5 and 8 are all rotated 180 degrees compared to the ones with ids 1 through 4
-            // so we need to account for this my multiplying the y direction offset of the corner from the center by -1
-            int fieldOrientationMultiplier = det->id <= 4 && det->id >=0 ? 1 : -1;
-            double centerToEdge = inToM(3.0); // perpendicular distance from center of apriltag to edge is 3 inches
+            if(preferredAlgorithm == OPENCV) {
+                // the tags between 5 and 8 are all rotated 180 degrees compared to the ones with ids 1 through 4
+                // so we need to account for this my multiplying the y direction offset of the corner from the center by -1
+                int fieldOrientationMultiplier = det->id <= 4 && det->id >= 0 ? 1 : -1;
+                double centerToEdge = inToM(3.0); // perpendicular distance from center of apriltag to edge is 3 inches
 
-            // construct image and object points
-            for(int j = 0; j < 4; j++) {
-                imagePoints.emplace_back();
-                objectPoints.emplace_back();
+                // construct image and object points
+                for (int j = 0; j < 4; j++) {
+                    imagePoints.emplace_back();
+                    objectPoints.emplace_back();
+                }
+
+                imagePoints[currentTagIndex * 4 + 0] = cv::Point2d(det->p[0][0], det->p[0][1]);
+                objectPoints[currentTagIndex * 4 + 0] = aprilTagFieldPoints[det->id] +
+                                                        cv::Point3d(0.0, fieldOrientationMultiplier * centerToEdge,
+                                                                      -centerToEdge);
+                imagePoints[currentTagIndex * 4 + 1] = cv::Point2d(det->p[1][0], det->p[1][1]);
+                objectPoints[currentTagIndex * 4 + 1] = aprilTagFieldPoints[det->id] +
+                                                        cv::Point3d(0.0, -fieldOrientationMultiplier * centerToEdge,
+                                                                      -centerToEdge);
+                imagePoints[currentTagIndex * 4 + 2] = cv::Point2d(det->p[2][0], det->p[2][1]);
+                objectPoints[currentTagIndex * 4 + 2] = aprilTagFieldPoints[det->id] +
+                                                        cv::Point3d(0.0, -fieldOrientationMultiplier * centerToEdge,
+                                                                      centerToEdge);
+                imagePoints[currentTagIndex * 4 + 3] = cv::Point2d(det->p[3][0], det->p[3][1]);
+                objectPoints[currentTagIndex * 4 + 3] = aprilTagFieldPoints[det->id] +
+                                                        cv::Point3d(0.0, fieldOrientationMultiplier * centerToEdge,
+                                                                      centerToEdge);
+            } else if(preferredAlgorithm == APRILTAG) {
+                apriltag_detection_info_t info;
+                info.det = det;
+                info.tagsize = tagsize;
+                info.fx = cameraMatrix.at<double>(0, 0);
+                info.fy = cameraMatrix.at<double>(1, 1);
+                info.cx = cameraMatrix.at<double>(0, 2);
+                info.cy = cameraMatrix.at<double>(1, 2);
+
+
+                apriltag_pose_t pose;
+                double err = estimate_tag_pose(&info, &pose);
+
+                cv::Mat RMat = cv::Mat(pose.R->nrows, pose.R->ncols, CV_64F, pose.R->data);
+                cv::Mat tVec = cv::Mat(pose.t->nrows, pose.t->ncols, CV_64F, pose.t->data);
+
+                cv::Mat objToCam = cv::Mat::eye(4, 4, CV_64F);
+                for(int i = 0; i < 3; i++) {
+                    for(int j = 0; j < 3; j++) {
+                        objToCam.at<double>(i, j) = RMat.at<double>(i, j);
+                    }
+                }
+
+                for(int i = 0; i < 3; i++) {
+                    objToCam.at<double>(i, 3) = tVec.at<double>(0, i);
+                }
+
+
+                cv::Mat objToField = cv::Mat::eye(4, 4, CV_64F);
+                objToField.at<double>(0, 3) = aprilTagFieldPoints[det->id].x;
+                if(det->id >= 0 && det->id <= 4) {
+                    objToField.at<double>(0, 0) *= -1; // Equivalent of a 180 degree rotation
+                }
+                objToField.at<double>(1, 3) = aprilTagFieldPoints[det->id].y;
+                objToField.at<double>(2, 3) = aprilTagFieldPoints[det->id].z;
+
+                cv::Mat camPos = objToCam * cv::Matx41d(0.0, 0.0, 0.0, 1.0);
+                std::swap(camPos.at<double>(0, 1), camPos.at<double>(0, 2)); // swap y and z
+                std::swap(camPos.at<double>(0, 0), camPos.at<double>(0, 1)); // swap x and y
+                camPos = objToField * camPos;
+                cameraPositionEstimations.emplace_back(camPos.at<double>(0, 0), camPos.at<double>(0, 1), camPos.at<double>(0, 2));
             }
-            imagePoints[currentImageIndex * 4 + 0] = cv::Point2d(det->p[0][0], det->p[0][1]);
-            objectPoints[currentImageIndex * 4 + 0] = aprilTagFieldPoints[det->id] + cv::Point3d(0.0, fieldOrientationMultiplier * centerToEdge, -centerToEdge);
-            imagePoints[currentImageIndex * 4 + 1] = cv::Point2d(det->p[1][0], det->p[1][1]);
-            objectPoints[currentImageIndex * 4 + 1] = aprilTagFieldPoints[det->id] + cv::Point3d(0.0, -fieldOrientationMultiplier * centerToEdge, -centerToEdge);
-            imagePoints[currentImageIndex * 4 + 2] = cv::Point2d(det->p[2][0], det->p[2][1]);
-            objectPoints[currentImageIndex * 4 + 2] = aprilTagFieldPoints[det->id] + cv::Point3d(0.0, -fieldOrientationMultiplier * centerToEdge, centerToEdge);
-            imagePoints[currentImageIndex * 4 + 3] = cv::Point2d(det->p[3][0], det->p[3][1]);
-            objectPoints[currentImageIndex * 4 + 3] = aprilTagFieldPoints[det->id] + cv::Point3d(0.0, fieldOrientationMultiplier * centerToEdge, centerToEdge);
 
             if(!noGUI) {
                 drawDebugInfo(frame, det);
             }
-            currentImageIndex++;
+            currentTagIndex++;
             numDetections++;
         }
 
-        cv::Mat rvec, tvec, cameraPosition;
+        ImGui::End();
+
+        cv::Mat rvec, tvec;
+        cv::Mat cameraPosition(1, 3, CV_64F);
         cv::Mat fieldImageAnnotated;
 
         if(numDetections > 0) {
-            cv::solvePnPRansac(objectPoints, imagePoints, cameraMatrix, distortionCoefficients, rvec, tvec);
-            std::vector<cv::Point2d> outPoints;
-            cv::projectPoints(objectPoints, rvec, tvec, cameraMatrix, distortionCoefficients, outPoints);
+            if(preferredAlgorithm == OPENCV) {
+                cv::solvePnPRansac(objectPoints, imagePoints, cameraMatrix, distortionCoefficients, rvec, tvec);
+                std::vector<cv::Point2d> outPoints;
+                cv::projectPoints(objectPoints, rvec, tvec, cameraMatrix, distortionCoefficients, outPoints);
 
-            cv::Mat rotMat;
-            cv::Rodrigues(rvec, rotMat);
-            cameraPosition = -rotMat.inv() * tvec;
+                cv::Mat rotMat;
+                cv::Rodrigues(rvec, rotMat);
+                cameraPosition = -rotMat.inv() * tvec;
 
-            if(!noGUI) {
-                int pointIndex = 0;
-                for (auto &point: outPoints) {
-                    cv::circle(frame, point, 5, cv::Scalar(0, 0, 0xff), -1);
-                    cv::putText(frame, std::to_string(pointIndex), point, cv::FONT_HERSHEY_COMPLEX, 1.0f,
-                                cv::Scalar(0, 0xff, 0));
-                    pointIndex++;
+                if (!noGUI) {
+                    int pointIndex = 0;
+                    for (auto &point: outPoints) {
+                        cv::circle(frame, point, 5, cv::Scalar(0, 0, 0xff), -1);
+                        cv::putText(frame, std::to_string(pointIndex), point, cv::FONT_HERSHEY_COMPLEX, 1.0f,
+                                    cv::Scalar(0, 0xff, 0));
+                        pointIndex++;
+                    }
                 }
-            }
+            } else if(preferredAlgorithm == APRILTAG) {
+                cv::Point3d positionEstimationsSum(0.0, 0.0, 0.0);
+                for(auto& position : cameraPositionEstimations) {
+                    positionEstimationsSum += position;
+                }
 
+                cv::Point3d averagePosition = positionEstimationsSum / (double)cameraPositionEstimations.size();
+                cameraPosition.at<double>(0, 0) = averagePosition.x;
+                cameraPosition.at<double>(0, 1) = averagePosition.y;
+                cameraPosition.at<double>(0, 2) = averagePosition.z;
+            }
         }
 
         if (!noGUI) {
