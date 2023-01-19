@@ -7,6 +7,8 @@
 #include <filesystem>
 #include <argparse.h>
 
+#include <vector>
+
 cv::Size chessboardSize(9, 6);
 float chessboardSquareSize = 0.015;
 const std::string filenameBase = "data/calibrations/";
@@ -121,5 +123,6 @@ int main(int argc, const char** argv) {
     std::string filename = std::string("data/calibrations/") + cameraName + "_info.yml";
     fs.open(filename, cv::FileStorage::WRITE);
     fs << "camera_matrix" << cameraMatrix;
+
     fs << "distance_coefficients" << distortionCoefficients;
 }
