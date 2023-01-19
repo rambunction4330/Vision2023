@@ -255,15 +255,22 @@ int main(int argc, const char **argv) {
 
                 cv::Mat objToField = cv::Mat::eye(4, 4, CV_64F);
                 objToField.at<double>(0, 3) = aprilTagFieldPoints[det->id].x;
-                if(det->id >= 0 && det->id <= 4) {
-                    objToField.at<double>(0, 0) *= -1; // Equivalent of a 180 degree rotation
-                }
+//                if(det->id >= 0 && det->id <= 4) {
+//                    objToField.at<double>(0, 0) *= -1; // Equivalent of a 180 degree rotation
+//                }
                 objToField.at<double>(1, 3) = aprilTagFieldPoints[det->id].y;
+//                if(det->id >= 5 && det->id <= 8) {
+//                    objToField.at<double>(1, 3) *= -1; // Equivalent of a 180 degree rotation
+//                }
                 objToField.at<double>(2, 3) = aprilTagFieldPoints[det->id].z;
 
-                cv::Mat camPos = objToCam * cv::Matx41d(0.0, 0.0, 0.0, 1.0);
+                cv::Mat camPos = objToCam.inv() * cv::Matx41d(0.0, 0.0, 0.0, 1.0);
                 std::swap(camPos.at<double>(0, 1), camPos.at<double>(0, 2)); // swap y and z
                 std::swap(camPos.at<double>(0, 0), camPos.at<double>(0, 1)); // swap x and y
+
+                if(det->id <= 8 && det->id >= 5) {
+                    camPos.at<double>(0, 0) *= -1;
+                }
                 camPos = objToField * camPos;
                 cameraPositionEstimations.emplace_back(camPos.at<double>(0, 0), camPos.at<double>(0, 1), camPos.at<double>(0, 2));
             }
