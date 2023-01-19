@@ -4,5 +4,7 @@
     <mapping directory="$PROJECT_DIR$" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/third_party/AprilTag" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/third_party/argparse" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/third_party/glfw" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/third_party/imgui" vcs="Git" />
   </component>
 </project>

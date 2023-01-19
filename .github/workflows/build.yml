@@ -1,10 +1,6 @@
 name: CMake
 
-on:
-  push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+on: [push, pull_request]
 
 env:
   # Customize the CMake build type here (Release, Debug, RelWithDebInfo, etc.)
@@ -23,7 +19,7 @@ jobs:
         submodules: true
     
     - name: Install Dependencies
-      run: sudo apt update && sudo apt install libopencv-dev
+      run: sudo apt update && sudo apt install libopencv-dev xorg-dev
 
     - name: Configure CMake
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.

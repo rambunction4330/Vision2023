@@ -40,7 +40,7 @@ static void compileChessboardCorners(const std::vector<std::filesystem::path> &i
                               std::vector<std::vector<cv::Point2f>> &imagePoints) {
     std::cout << "finding chessboard corners...";
     for(int i = 0; i < images.size(); i++) {
-        std::__1::vector<cv::Point2f> points;
+        std::vector<cv::Point2f> points;
         bool found = cv::findChessboardCorners(images[i], chessboardSize, points);
 
         if(!found) {
@@ -112,16 +112,17 @@ int main(int argc, const char** argv) {
 
 
     std::vector<cv::Mat> rVectors, tVectors;
-    cv::Mat distanceCoefficients = cv::Mat::zeros(8, 1, CV_64F);
+    cv::Mat distortionCoefficients = cv::Mat::zeros(8, 1, CV_64F);
     cv::Mat cameraMatrix;
 
     std::cout << "calibrating camera..." << std::flush;
-    cv::calibrateCamera(objectPoints, imagePoints, images[0].size(), cameraMatrix, distanceCoefficients, rVectors, tVectors);
+    cv::calibrateCamera(objectPoints, imagePoints, images[0].size(), cameraMatrix, distortionCoefficients, rVectors, tVectors);
     std::cout << "done" << std::endl;
 
     cv::FileStorage fs;
     std::string filename = std::string("data/calibrations/") + cameraName + "_info.yml";
     fs.open(filename, cv::FileStorage::WRITE);
     fs << "camera_matrix" << cameraMatrix;
-    fs << "distance_coefficients" << distanceCoefficients;
+
+    fs << "distance_coefficients" << distortionCoefficients;
 }
