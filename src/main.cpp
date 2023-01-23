@@ -10,6 +10,7 @@
 #include "FieldData.h"
 
 #include "incbin.h"
+#include "perf.h"
 
 INCBIN(FieldImage, "assets/field23.png");
 
@@ -64,6 +65,14 @@ static void undistortImage(cv::Mat& frame, cv::Mat cameraMatrix, cv::InputArray 
     cv::undistort(frame, temp, cameraMatrix, distanceCoefficients);
     temp.copyTo(frame);
 }
+
+// register perf here
+REGISTER_PERF(total);
+REGISTER_PERF(detection);
+REGISTER_PERF(capture);
+REGISTER_PERF(undistortion);
+REGISTER_PERF(position_estimation);
+REGISTER_PERF(gui_display);
 
 int main(int argc, const char **argv) {
     struct argparse_option options[] = {
@@ -145,8 +154,23 @@ int main(int argc, const char **argv) {
     std::vector<cv::Point3d> cameraPositionEstimations;
 
     while (noGUI || !guiSystem.windowShouldClose()) {
+        CLEAR_PERF(total);
+        CLEAR_PERF(detection);
+        CLEAR_PERF(capture);
+        CLEAR_PERF(undistortion);
+        CLEAR_PERF(position_estimation);
+        CLEAR_PERF(gui_display);
+
+        BEGIN_PERF(total);
+
+        BEGIN_PERF(capture);
         camera.read(frame);
-        undistortImage(frame, cameraMatrix, distortionCoefficients);
+        END_PERF(capture);
+
+
+        BEGIN_PERF(undistortion);
+        //undistortImage(frame, cameraMatrix, distortionCoefficients);
+        END_PERF(undistortion);
 
         cv::cvtColor(frame, gray, cv::COLOR_BGR2GRAY);
 
@@ -157,8 +181,10 @@ int main(int argc, const char **argv) {
                 .buf = gray.data
         };
 
+        BEGIN_PERF(detection);
         detectedTagsBits = 0;
         zarray_t *detections = apriltag_detector_detect(apriltagDetector, &imHeader);
+        END_PERF(detection);
 
         if (!noGUI) {
             guiSystem.begin();
@@ -172,7 +198,6 @@ int main(int argc, const char **argv) {
         imagePoints.clear();
         objectPoints.clear();
         cameraPositionEstimations.clear();
-        ImGui::Begin("Algorithm Debug");
         for (int i = 0; i < zarray_size(detections); i++) {
             apriltag_detection_t *det;
             zarray_get(detections, i, &det);
@@ -226,6 +251,7 @@ int main(int argc, const char **argv) {
                                                         cv::Point3d(0.0, fieldOrientationMultiplier * centerToEdge,
                                                                       centerToEdge);
             } else if(preferredAlgorithm == APRILTAG) {
+                BEGIN_PERF(position_estimation);
                 apriltag_detection_info_t info;
                 info.det = det;
                 info.tagsize = tagsize;
@@ -266,6 +292,7 @@ int main(int argc, const char **argv) {
                 std::swap(camPos.at<double>(0, 0), camPos.at<double>(0, 1)); // swap x and y
                 camPos = objToField * camPos;
                 cameraPositionEstimations.emplace_back(camPos.at<double>(0, 0), camPos.at<double>(0, 1), camPos.at<double>(0, 2));
+                END_PERF(position_estimation);
             }
 
             if(!noGUI) {
@@ -275,7 +302,6 @@ int main(int argc, const char **argv) {
             numDetections++;
         }
 
-        ImGui::End();
 
         cv::Mat rvec, tvec;
         cv::Mat cameraPosition(1, 3, CV_64F);
@@ -314,6 +340,7 @@ int main(int argc, const char **argv) {
         }
 
         if (!noGUI) {
+            BEGIN_PERF(gui_display);
             ImGui::Begin("Camera");
             guiSystem.updateTexture(&cameraTexture, frame);
             ImGui::Image((ImTextureID) cameraTexture.ID, ImGui::GetContentRegionAvail());
@@ -362,14 +389,24 @@ int main(int argc, const char **argv) {
             ImGui::End();
 
             guiSystem.end();
+            END_PERF(gui_display);
         }
 
         apriltag_detections_destroy(detections);
 
 
+
         if (cv::waitKey(1) == 'q') {
             break;
         }
+
+        END_PERF(total);
+        PRINT_PERF(total);
+        PRINT_PERF(detection);
+        PRINT_PERF(capture);
+        PRINT_PERF(undistortion);
+        PRINT_PERF(position_estimation);
+        PRINT_PERF(gui_display);
     }
 
     if (!noGUI) {

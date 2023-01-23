@@ -25,10 +25,9 @@ static void calcBoardCornerPositions(cv::Size boardSize, float squareSize, std::
 
 std::vector<std::filesystem::path> getAllImagesInDataDirectory() {
     auto imgsItr = std::filesystem::directory_iterator("data/images");
-    const int numFiles =
-    std::distance(imgsItr, std::filesystem::directory_iterator());
+    //const int numFiles = std::distance(imgsItr, std::filesystem::directory_iterator());
     std::vector<std::filesystem::path> files;
-    files.reserve(numFiles);
+    //files.reserve(numFiles);
 
     for(const auto& entry : imgsItr) {
         std::string extension = entry.path().extension();

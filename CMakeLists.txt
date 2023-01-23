@@ -1,9 +1,9 @@
 cmake_minimum_required(VERSION 3.16)
 project(Vision2023)
 
+set(BUILD_PYTHON_WRAPPER OFF)
 set(CMAKE_CXX_STANDARD 17)
 
-set(BUILD_PYTHON_WRAPPER OFF)
 add_subdirectory(third_party/AprilTag)
 add_subdirectory(third_party/argparse)
 
@@ -29,7 +29,7 @@ add_library(imgui
         third_party/imgui/backends/imgui_impl_opengl3.cpp
         )
 target_include_directories(imgui PUBLIC third_party/imgui)
-target_link_libraries(imgui PUBLIC glfw)
+target_link_libraries(imgui PUBLIC dl glfw)
 
 # OpenGL
 find_package(OpenGL)
@@ -38,4 +38,11 @@ find_package(OpenGL)
 add_library(incbin STATIC third_party/incbin/incbin.c)
 target_include_directories(incbin PUBLIC third_party/incbin)
 
+if(UNIX)
+    target_link_libraries(vision PUBLIC dl)
+endif()
 target_link_libraries(vision PUBLIC imgui glfw glad OpenGL::GL incbin)
+
+add_executable(example-opencv src/opencv_demo.cc)
+target_include_directories(example-opencv PUBLIC ${OpenCV_INCLUDE_DIRS})
+target_link_libraries(example-opencv PUBLIC apriltag ${OpenCV_LIBS})
