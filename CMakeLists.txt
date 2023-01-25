@@ -4,8 +4,6 @@ project(Vision2023)
 set(BUILD_PYTHON_WRAPPER OFF)
 set(CMAKE_CXX_STANDARD 17)
 
-add_subdirectory(third_party/AprilTag)
-add_subdirectory(third_party/argparse)
 
 find_package(OpenCV REQUIRED)
 
@@ -13,10 +11,18 @@ add_executable(vision src/main.cpp src/VisualizationSystem.cpp src/Visualization
 target_link_libraries(vision PUBLIC ${OpenCV_LIBS} apriltag argparse)
 target_include_directories(vision PUBLIC ${OpenCV_INCLUDE_DIRS} src)
 
+if(IS_RPI)
+    message("here")
+    target_compile_definitions(vision PRIVATE VISION_GUI_OPENGL_ES2 HI)
+endif()
+
+
 add_subdirectory(tools/calibration)
 add_subdirectory(tools/camera)
 add_subdirectory(third_party/glfw)
 add_subdirectory(third_party/glad)
+add_subdirectory(third_party/AprilTag)
+add_subdirectory(third_party/argparse)
 
 # Imgui Configuration
 add_library(imgui
@@ -41,6 +47,7 @@ target_include_directories(incbin PUBLIC third_party/incbin)
 if(UNIX)
     target_link_libraries(vision PUBLIC dl)
 endif()
+
 target_link_libraries(vision PUBLIC imgui glfw glad OpenGL::GL incbin)
 
 add_executable(example-opencv src/opencv_demo.cc)
