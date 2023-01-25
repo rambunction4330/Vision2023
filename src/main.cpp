@@ -11,6 +11,7 @@
 
 #include "incbin.h"
 #include "perf.h"
+#include "ThreadedCaptureSystem.h"
 
 INCBIN(FieldImage, "assets/field23.png");
 
@@ -106,11 +107,8 @@ int main(int argc, const char **argv) {
                       "\nBe sure to run this in the source directory containing the data folder.");
     argc = argparse_parse(&argparse, argc, argv);
 
-    cv::VideoCapture camera(cameraID);
-    if (!camera.isOpened()) {
-        std::cerr << "failed to open camera!!!" << std::endl;
-        std::exit(EXIT_FAILURE);
-    }
+    ThreadedCaptureSystem captureSystem;
+    captureSystem.start(cameraID);
 
     cv::FileStorage fs;
 
@@ -163,7 +161,7 @@ int main(int argc, const char **argv) {
         BEGIN_PERF(total);
 
         BEGIN_PERF(capture);
-        camera.read(frame);
+        captureSystem.read(frame);
         END_PERF(capture);
 
 
