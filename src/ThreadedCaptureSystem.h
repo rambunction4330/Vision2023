@@ -5,6 +5,7 @@
 #ifndef VISION2023_THREADEDCAPTURESYSTEM_H
 #define VISION2023_THREADEDCAPTURESYSTEM_H
 
+#include <atomic>
 #include <thread>
 #include <opencv2/core/mat.hpp>
 #include <opencv2/videoio.hpp>
