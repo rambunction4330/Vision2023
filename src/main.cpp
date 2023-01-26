@@ -3,15 +3,15 @@
 #include <opencv2/opencv.hpp>
 #include <apriltag.h>
 #include "tag16h5.h"
-#include "apriltag_pose.h"
 
 #include "argparse.h"
 #include "VisualizationSystem.h"
-#include "FieldData.h"
 
 #include "incbin.h"
 #include "perf.h"
 #include "ThreadedCaptureSystem.h"
+#include "Detection.h"
+#include "PositionEstimation.h"
 
 INCBIN(FieldImage, "assets/field23.png");
 
@@ -62,12 +62,12 @@ static void undistortImage(cv::Mat &frame, cv::Mat cameraMatrix, cv::InputArray 
 }
 
 // register perf here
-REGISTER_PERF(total);
-REGISTER_PERF(detection);
-REGISTER_PERF(capture);
-REGISTER_PERF(undistortion);
-REGISTER_PERF(position_estimation);
-REGISTER_PERF(gui_display);
+REGISTER_PERF(total)
+REGISTER_PERF(detection)
+REGISTER_PERF(capture)
+REGISTER_PERF(undistortion)
+REGISTER_PERF(position_estimation)
+REGISTER_PERF(gui_display)
 
 int main(int argc, const char **argv) {
 
@@ -145,151 +145,57 @@ int main(int argc, const char **argv) {
                 std::vector<unsigned char>(gFieldImageData, gFieldImageData + gFieldImageSize), cv::IMREAD_UNCHANGED);
     }
 
-    cv::Mat frame, gray;
-
-    uint32_t detectedTagsBits = 0;
-    std::vector<cv::Point3d> cameraPositionEstimations;
+    cv::Mat frame;
 
     while (noGUI || !guiSystem.windowShouldClose()) {
-        CLEAR_PERF(total);
-        CLEAR_PERF(detection);
-        CLEAR_PERF(capture);
-        CLEAR_PERF(undistortion);
-        CLEAR_PERF(position_estimation);
-        CLEAR_PERF(gui_display);
+        CLEAR_PERF(total)
+        CLEAR_PERF(detection)
+        CLEAR_PERF(capture)
+        CLEAR_PERF(undistortion)
+        CLEAR_PERF(position_estimation)
+        CLEAR_PERF(gui_display)
 
-        BEGIN_PERF(total);
+        BEGIN_PERF(total)
 
-        BEGIN_PERF(capture);
+        BEGIN_PERF(capture)
         captureSystem.read(frame);
-        END_PERF(capture);
+        END_PERF(capture)
 
 
-        BEGIN_PERF(undistortion);
+        BEGIN_PERF(undistortion)
         //undistortImage(frame, cameraMatrix, distortionCoefficients);
-        END_PERF(undistortion);
+        END_PERF(undistortion)
 
-        cv::cvtColor(frame, gray, cv::COLOR_BGR2GRAY);
+        BEGIN_PERF(detection)
+        zarray_t* allDetections;
+        int detectedTagBits = 0;
+        std::array<apriltag_detection_t*, 8> detections = runDetection(apriltagDetector, frame, decisionMarginCutoff, &allDetections,
+                     &detectedTagBits);
+        END_PERF(detection)
 
-        image_u8_t imHeader = {
-                .width = gray.cols,
-                .height = gray.rows,
-                .stride = gray.cols,
-                .buf = gray.data
-        };
-
-        BEGIN_PERF(detection);
-        detectedTagsBits = 0;
-        zarray_t *detections = apriltag_detector_detect(apriltagDetector, &imHeader);
-        END_PERF(detection);
+        BEGIN_PERF(position_estimation)
+        cv::Point3d position;
+        double theta;
+        runPositionEstimation(detections, detectedTagBits, cameraMatrix, tagsize, &position, &theta);
+        END_PERF(position_estimation)
 
         BEGIN_PERF(gui_display)
+        for(int i = 1; i <= 8; i++) {
+            if(detectedTagBits & (1 << i)) {
+                drawDebugInfo(frame, detections[i- 1]);
+            }
+        }
+
         if (!noGUI) {
             guiSystem.begin();
             ImGui::DockSpaceOverViewport();
         }
         END_PERF(gui_display);
 
-        // We shouldn't be iterating over more than 8 detections because there are only 8 in the field
-        // In fact, realistically, the number shouldn't be more than 4 as the camera shouldn't have 360 degree vision
-        int numDetections = 0;
-        int currentTagIndex = 0;
-        cameraPositionEstimations.clear();
-        for (int i = 0; i < zarray_size(detections); i++) {
-            apriltag_detection_t *det;
-            zarray_get(detections, i, &det);
-
-            if (det->id <= 0 || det->id > 8) {
-//                std::cerr << "WARNING: A tag of id " << det->id << " detected but should not be on the game field!" << std::endl;
-                continue;
-            }
-
-            if (det->decision_margin < decisionMarginCutoff) {
-                continue;
-            }
-
-            if (det->hamming > 0) {
-                //std::cout << "sketchy tag of id " << det->id << " discarded" << std::endl;
-                continue;
-            }
-
-            if (detectedTagsBits & (1 << det->id)) {
-                std::cerr << "WARNING: multiple tags of id " << det->id << " found!" << std::endl;
-                continue;
-            } else {
-                detectedTagsBits |= (1 << det->id);
-            }
-
-            BEGIN_PERF(position_estimation);
-            apriltag_detection_info_t info;
-            info.det = det;
-            info.tagsize = tagsize;
-            info.fx = cameraMatrix.at<double>(0, 0);
-            info.fy = cameraMatrix.at<double>(1, 1);
-            info.cx = cameraMatrix.at<double>(0, 2);
-            info.cy = cameraMatrix.at<double>(1, 2);
-
-
-            apriltag_pose_t pose;
-            double err = estimate_tag_pose(&info, &pose);
-
-            cv::Mat RMat = cv::Mat(pose.R->nrows, pose.R->ncols, CV_64F, pose.R->data);
-            cv::Mat tVec = cv::Mat(pose.t->nrows, pose.t->ncols, CV_64F, pose.t->data);
-
-            cv::Mat objToCam = cv::Mat::eye(4, 4, CV_64F);
-            for (int i = 0; i < 3; i++) {
-                for (int j = 0; j < 3; j++) {
-                    objToCam.at<double>(i, j) = RMat.at<double>(i, j);
-                }
-
-                for (int i = 0; i < 3; i++) {
-                    objToCam.at<double>(i, 3) = tVec.at<double>(0, i);
-                }
-
-
-                cv::Mat objToField = cv::Mat::eye(4, 4, CV_64F);
-                objToField.at<double>(0, 3) = aprilTagFieldPoints[det->id].x;
-                if (det->id >= 0 && det->id <= 4) {
-                    objToField.at<double>(0, 0) *= -1; // Equivalent of a 180 degree rotation
-                }
-                objToField.at<double>(1, 3) = aprilTagFieldPoints[det->id].y;
-                objToField.at<double>(2, 3) = aprilTagFieldPoints[det->id].z;
-
-                cv::Mat camPos = objToCam * cv::Matx41d(0.0, 0.0, 0.0, 1.0);
-                std::swap(camPos.at<double>(0, 1), camPos.at<double>(0, 2)); // swap y and z
-                std::swap(camPos.at<double>(0, 0), camPos.at<double>(0, 1)); // swap x and y
-                camPos = objToField * camPos;
-                cameraPositionEstimations.emplace_back(camPos.at<double>(0, 0), camPos.at<double>(0, 1),
-                                                       camPos.at<double>(0, 2));
-            }
-            END_PERF(position_estimation);
-
-            BEGIN_PERF(gui_display);
-            if (!noGUI) {
-                drawDebugInfo(frame, det);
-            }
-            END_PERF(gui_display);
-
-            currentTagIndex++;
-            numDetections++;
-        }
-
-
-        cv::Mat rvec, tvec;
-        cv::Mat cameraPosition(1, 3, CV_64F);
         cv::Mat fieldImageAnnotated;
 
-        if (numDetections > 0) {
-            cv::Point3d positionEstimationsSum(0.0, 0.0, 0.0);
-            for (auto &position: cameraPositionEstimations) {
-                positionEstimationsSum += position;
-            }
-
-            cv::Point3d averagePosition = positionEstimationsSum / (double) cameraPositionEstimations.size();
-            cameraPosition.at<double>(0, 0) = averagePosition.x;
-            cameraPosition.at<double>(0, 1) = averagePosition.y;
-            cameraPosition.at<double>(0, 2) = averagePosition.z;
-        }
+        int numDetections = __builtin_popcount(detectedTagBits);
+        cv::Mat cameraPosition(position);
 
         if (!noGUI) {
             BEGIN_PERF(gui_display);
@@ -341,23 +247,23 @@ int main(int argc, const char **argv) {
             ImGui::End();
 
             guiSystem.end();
-            END_PERF(gui_display);
+            END_PERF(gui_display)
         }
 
-        apriltag_detections_destroy(detections);
+        apriltag_detections_destroy(allDetections);
 
 
         if (cv::waitKey(1) == 'q') {
             break;
         }
 
-        END_PERF(total);
-        PRINT_PERF(total);
-        PRINT_PERF(detection);
-        PRINT_PERF(capture);
-        PRINT_PERF(undistortion);
-        PRINT_PERF(position_estimation);
-        PRINT_PERF(gui_display);
+        END_PERF(total)
+        PRINT_PERF(total)
+        PRINT_PERF(detection)
+        PRINT_PERF(capture)
+        PRINT_PERF(undistortion)
+        PRINT_PERF(position_estimation)
+        PRINT_PERF(gui_display)
     }
 
     if (!noGUI) {
