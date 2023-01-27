@@ -244,6 +244,7 @@ int main(int argc, const char **argv) {
 
                 ImGui::Text("%s", ss.str().c_str());
             }
+            ImGui::Text("angle: %f degrees", theta * (180 / M_PI));
             ImGui::End();
 
             guiSystem.end();

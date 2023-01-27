@@ -45,8 +45,6 @@ void runPositionEstimation(const std::array<apriltag_detection_t *, 8>& detectio
             objToCam.at<double>(k, 3) = tVec.at<double>(0, k);
         }
 
-        std::cout << "here" << i << std::endl;
-
         cv::Mat objToField = cv::Mat::eye(4, 4, CV_64F);
         objToField.at<double>(0, 3) = aprilTagFieldPoints[det->id].x;
         objToField.at<double>(1, 3) = aprilTagFieldPoints[det->id].y;
@@ -64,6 +62,13 @@ void runPositionEstimation(const std::array<apriltag_detection_t *, 8>& detectio
         camPos = objToField * camPos;
         positions[currentPositiveDetectionIndex] = cv::Point3d(camPos.at<double>(0, 0), camPos.at<double>(0, 1), camPos.at<double>(0, 2));
 
+        double r31 = RMat.at<double>(2, 0);
+        double r32 = RMat.at<double>(2, 1);
+        double r33 = RMat.at<double>(2, 2);
+
+        double currentTheta = std::atan2(-r31, std::sqrt(r32 * r32 + r33 * r33));
+        angles[currentPositiveDetectionIndex] = currentTheta;
+
         currentPositiveDetectionIndex++;
     }
 
@@ -72,6 +77,12 @@ void runPositionEstimation(const std::array<apriltag_detection_t *, 8>& detectio
         for (auto &position: positions) {
             positionEstimationsSum += position;
         }
+
+        double thetaSum = 0.0;
+        for (auto currentTheta : angles) {
+            thetaSum += currentTheta;
+        }
+        *theta = thetaSum / (double)currentPositiveDetectionIndex;
 
         cv::Point3d averagePosition = positionEstimationsSum / (double) currentPositiveDetectionIndex;
         *position = cv::Point3d(averagePosition);
