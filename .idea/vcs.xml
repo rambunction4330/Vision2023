@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="VcsDirectoryMappings">
+    <mapping directory="$PROJECT_DIR$" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/third_party/AprilTag" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/third_party/argparse" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/third_party/glfw" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/third_party/imgui" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/third_party/incbin" vcs="Git" />
+  </component>
+</project>

@@ -60,7 +60,6 @@ public:
     void stop();
 
     std::chrono::high_resolution_clock::time_point getLastUpdatedTime() { return lastUpdatedTime; }
-
 private:
     void run();
 

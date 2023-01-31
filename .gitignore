@@ -36,5 +36,9 @@ build
 cmake-build-release
 
 data/calibrations/*
+<<<<<<< HEAD
 data/images/*
 .cache
+=======
+data/images/*
+>>>>>>> 3f4df455e5328eb0e1df8f4b42d09cc6ae2b2775
