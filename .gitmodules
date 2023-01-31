@@ -1,0 +1,16 @@
+[submodule "third_party/AprilTag"]
+	path = third_party/AprilTag
+	url = https://github.com/AprilRobotics/apriltag.git
+[submodule "third_party/argparse"]
+	path = third_party/argparse
+	url = https://github.com/cofyc/argparse.git
+[submodule "third_party/glfw"]
+	path = third_party/glfw
+	url = https://github.com/glfw/glfw.git
+[submodule "third_party/imgui"]
+	path = third_party/imgui
+	url = https://github.com/ocornut/imgui.git
+	branch = docking
+[submodule "third_party/incbin"]
+	path = third_party/incbin
+	url = https://github.com/graphitemaster/incbin.git
