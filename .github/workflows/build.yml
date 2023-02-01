@@ -20,6 +20,30 @@ jobs:
     
     - name: Install Dependencies
       run: sudo apt update && sudo apt install libopencv-dev xorg-dev
+    
+    - name: Install Wpilib
+      run: |
+        cd ..
+        mkdir wpilib-build
+        cd wpilib-build
+        gh release download --archive=zip -O wpilib-source.zip
+        unzip wpilib-source.zip
+        rm -rf wpilib-source.zip
+        cd $(ls)
+        mkdir build
+        cd build
+        cmake .. -GNinja -DWITH_JAVA=OFF \ 
+                         -DWITH_WPILIB=OFF \
+                         -DWITH_EXAMPLES=OFF \
+                         -DWITH_WPIMATH=OFF \
+                         -DWITH_GUI=OFF \
+                         -DWITH_SIMULATION_MODULES=OFF \
+                        -GNinja
+        
+        ninja
+        ninja install
+
+        
 
     - name: Configure CMake
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
