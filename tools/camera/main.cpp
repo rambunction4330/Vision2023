@@ -8,14 +8,19 @@
 #include <argparse.h>
 #include <chrono>
 
+bool noGUI = false;
+bool printPerf = false;
+
 int main(int argc, const char **argv) {
     struct argparse_option options[] = {
             OPT_HELP(),
+            OPT_BOOLEAN((char) NULL, "no-gui", (void *) &noGUI, "whether or not to disable GUI output for the program"),
+            OPT_BOOLEAN((char) NULL, "perf", (void *) &printPerf, "whether or not to print performance of camera reads"),
             OPT_END()
     };
 
     static const char *const usages[] = {
-            "camera",
+            "camera [args]",
             NULL,
     };
 
@@ -38,18 +43,22 @@ int main(int argc, const char **argv) {
         cv::Mat frame;
         auto currentTime = std::chrono::high_resolution_clock::now();
         camera.read(frame);
-        std::cout << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - currentTime).count() << std::endl;
+        if(printPerf) {
+            std::cout << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - currentTime).count() << std::endl;
+        }
 
-        /*cv::imshow("camera", frame);
+        if(!noGUI) {
+            cv::imshow("camera", frame);
 
-        int key = cv::waitKey(1);
-        if (key == 'q') {
-            break;
-        } else if (key == 'a') {
-            std::string filename = std::string("data/images/img_") + std::to_string(imageNum) + ".png";
-            std::cout << "write: " << filename << std::endl;
-            cv::imwrite(filename, frame);
-            imageNum++;
-        }*/
+            int key = cv::waitKey(1);
+            if (key == 'q') {
+                break;
+            } else if (key == 'a') {
+                std::string filename = std::string("data/images/img_") + std::to_string(imageNum) + ".png";
+                std::cout << "write: " << filename << std::endl;
+                cv::imwrite(filename, frame);
+                imageNum++;
+            }
+        }
     }
 }
