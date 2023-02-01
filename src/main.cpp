@@ -1,5 +1,12 @@
+/**
+ * Author: Aiden Lambert
+ * Author Quote: the coding team do be coding and the coding do be do being. Doo be doo be doo. --Adi Jain
+ */
+
 #include <iostream>
 
+#include <ntcore_cpp.h>
+#include <opencv2/imgproc.hpp>
 #include <opencv2/opencv.hpp>
 #include <apriltag.h>
 #include "tag16h5.h"
@@ -12,6 +19,9 @@
 #include "ThreadedCaptureSystem.h"
 #include "Detection.h"
 #include "PositionEstimation.h"
+
+#include "NetworkSystem.h"
+#include "terminal.h"
 
 INCBIN(FieldImage, "assets/field23.png");
 
@@ -133,19 +143,35 @@ int main(int argc, const char **argv) {
     VisualizationSystem::Texture cameraTexture;
     VisualizationSystem::Texture fieldTexture;
     cv::Mat fieldImageMatDefaultData;
+
+// load field image
+
     if (!noGUI) {
         guiSystem.init();
 
         cameraTexture = guiSystem.createTexture();
         fieldTexture = guiSystem.createTexture();
 
+        cv::Mat temp = cv::imdecode(
+            std::vector<unsigned char>(gFieldImageData, gFieldImageData + gFieldImageSize), cv::IMREAD_UNCHANGED);
+        
 
-        // load field image
-        fieldImageMatDefaultData = cv::imdecode(
-                std::vector<unsigned char>(gFieldImageData, gFieldImageData + gFieldImageSize), cv::IMREAD_UNCHANGED);
+        double scale_percent = 30;
+        int width = (int)(temp.cols * scale_percent / 100);
+        int height = (int)(temp.rows * scale_percent / 100);
+
+        cv::resize(temp, fieldImageMatDefaultData, cv::Size(width, height));
     }
 
     cv::Mat frame;
+
+    terminal::initAlternateScreen();
+    terminal::goToCorner();
+
+    std::chrono::high_resolution_clock::time_point lastUpdatedTime;
+    NetworkSystem networkSystem;
+    networkSystem.init();
+    int32_t networkTableLastUpdateTime = nt::Now();
 
     while (noGUI || !guiSystem.windowShouldClose()) {
         CLEAR_PERF(total)
@@ -158,7 +184,16 @@ int main(int argc, const char **argv) {
         BEGIN_PERF(total)
 
         BEGIN_PERF(capture)
+//         while(captureSystem.getLastUpdatedTime() <= lastUpdatedTime) {
+// #ifndef __arm__
+//             __builtin_ia32_pause();
+// #else
+//             __asm__ __volatile__("yield");
+// #endif
+//         }
+//         lastUpdatedTime = captureSystem.getLastUpdatedTime();
         captureSystem.read(frame);
+        networkTableLastUpdateTime = nt::Now();
         END_PERF(capture)
 
 
@@ -193,9 +228,10 @@ int main(int argc, const char **argv) {
         END_PERF(gui_display);
 
         cv::Mat fieldImageAnnotated;
-
         int numDetections = __builtin_popcount(detectedTagBits);
         cv::Mat cameraPosition(position);
+
+        networkSystem.update(cv::Point2d(position.x, position.y), theta, networkTableLastUpdateTime);
 
         if (!noGUI) {
             BEGIN_PERF(gui_display);
@@ -217,7 +253,7 @@ int main(int argc, const char **argv) {
                 std::stringstream stringstream;
                 stringstream << cv::Point(xPosition, yPosition);
                 ImGui::Text("%s", stringstream.str().c_str());
-                cv::circle(fieldImageAnnotated, cv::Point(xPosition, yPosition), 20, cv::Scalar(0xff, 0, 0xff), -1);
+                cv::circle(fieldImageAnnotated, cv::Point(xPosition, yPosition), 5, cv::Scalar(0xff, 0, 0xff), -1);
 
             }
             guiSystem.updateTexture(&fieldTexture, fieldImageAnnotated);
@@ -259,13 +295,19 @@ int main(int argc, const char **argv) {
         }
 
         END_PERF(total)
+        terminal::clear();
+
+        std::cout << "position: " << position * 39.3701 << std::endl;
+        std::cout << "rotation: " << theta * (180.0 / M_PI) << " deg" << std::endl;
+
         PRINT_PERF(total)
         PRINT_PERF(detection)
         PRINT_PERF(capture)
-        PRINT_PERF(undistortion)
+        // PRINT_PERF(undistortion)
         PRINT_PERF(position_estimation)
         PRINT_PERF(gui_display)
     }
+    terminal::exitAlternateScreen();
 
     if (!noGUI) {
         guiSystem.destruct();

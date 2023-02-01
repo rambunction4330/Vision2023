@@ -6,14 +6,29 @@ set(CMAKE_CXX_STANDARD 17)
 
 
 find_package(OpenCV REQUIRED)
+find_package(wpilib REQUIRED)
 
-add_executable(vision src/main.cpp src/VisualizationSystem.cpp src/VisualizationSystem.h src/FieldData.cpp src/FieldData.h src/ThreadedCaptureSystem.cpp src/ThreadedCaptureSystem.h src/Detection.cpp src/Detection.h src/PositionEstimation.cpp src/PositionEstimation.h)
-target_link_libraries(vision PUBLIC ${OpenCV_LIBS} apriltag argparse)
+add_executable(vision
+    src/main.cpp
+    src/VisualizationSystem.cpp
+    src/VisualizationSystem.h
+    src/FieldData.cpp
+    src/FieldData.h
+    src/ThreadedCaptureSystem.cpp
+    src/ThreadedCaptureSystem.h
+    src/Detection.cpp
+    src/Detection.h
+    src/PositionEstimation.cpp
+    src/PositionEstimation.h
+    src/NetworkSystem.cpp
+    src/VideoServer.cpp
+    )
+target_link_libraries(vision PUBLIC ${OpenCV_LIBS} apriltag argparse ntcore cscore)
 target_include_directories(vision PUBLIC ${OpenCV_INCLUDE_DIRS} src)
 
 if(IS_RPI)
-    message("here")
     target_compile_definitions(vision PRIVATE VISION_GUI_OPENGL_ES2 HI)
+    target_compile_options(vision PUBLIC "-march=native" "-mcpu=native")
 endif()
 
 

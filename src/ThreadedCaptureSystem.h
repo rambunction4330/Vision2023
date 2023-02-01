@@ -6,6 +6,7 @@
 #define VISION2023_THREADEDCAPTURESYSTEM_H
 
 #include <atomic>
+#include <chrono>
 #include <thread>
 #include <opencv2/core/mat.hpp>
 #include <opencv2/videoio.hpp>
@@ -26,7 +27,7 @@ struct spinlock {
 #ifndef __arm__
                 __builtin_ia32_pause();
 #else
-                __yield();
+                __asm__ __volatile__("yield");
 #endif
             }
         }
@@ -51,10 +52,14 @@ public:
 
     void start(int port);
 
+    /**
+     * @return Time of last update
+     */
     void read(cv::Mat& mat);
 
     void stop();
 
+    std::chrono::high_resolution_clock::time_point getLastUpdatedTime() { return lastUpdatedTime; }
 private:
     void run();
 
@@ -65,6 +70,7 @@ private:
     spinlock lock;
     cv::Mat currentFrame;
     cv::Mat intermediateBuffer;
+    std::atomic<std::chrono::high_resolution_clock::time_point> lastUpdatedTime;
 
     std::atomic<bool> shouldExit = false;
 };
