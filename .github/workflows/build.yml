@@ -33,13 +33,7 @@ jobs:
         cd $(ls)
         mkdir build
         cd build
-        cmake .. -GNinja -DWITH_JAVA=OFF \ 
-                         -DWITH_WPILIB=OFF \
-                         -DWITH_EXAMPLES=OFF \
-                         -DWITH_WPIMATH=OFF \
-                         -DWITH_GUI=OFF \
-                         -DWITH_SIMULATION_MODULES=OFF \
-                        -GNinja
+        cmake .. -GNinja -DWITH_JAVA=OFF -DWITH_WPILIB=OFF -DWITH_EXAMPLES=OFF -DWITH_WPIMATH=OFF -DWITH_GUI=OFF -DWITH_SIMULATION_MODULES=OFF -GNinja
         
         ninja
         ninja install
