@@ -27,7 +27,7 @@ jobs:
         cd ..
         mkdir wpilib-build
         cd wpilib-build
-        gh release download -r wpilibsuite/allwpilib --archive=zip -O wpilib-source.zip
+        gh release download -R wpilibsuite/allwpilib --archive=zip -O wpilib-source.zip
         unzip wpilib-source.zip
         rm -rf wpilib-source.zip
         cd $(ls)
