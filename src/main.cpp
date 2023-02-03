@@ -1,38 +1,44 @@
+/**
+ * Author: Aiden Lambert
+ * Author Quote: the coding team do be coding and the coding do be do being. Doo be doo be doo. --Adi Jain
+ */
+
 #include <iostream>
 
+#include <ntcore_cpp.h>
+#include <opencv2/imgproc.hpp>
 #include <opencv2/opencv.hpp>
 #include <apriltag.h>
+#include "VideoServer.h"
 #include "tag16h5.h"
-#include "apriltag_pose.h"
 
 #include "argparse.h"
 #include "VisualizationSystem.h"
-#include "FieldData.h"
 
 #include "incbin.h"
 #include "perf.h"
+#include "ThreadedCaptureSystem.h"
+#include "Detection.h"
+#include "PositionEstimation.h"
+
+#include "NetworkSystem.h"
+#include "terminal.h"
 
 INCBIN(FieldImage, "assets/field23.png");
-
-enum POSE_ESTIM_ALGO {
-    OPENCV,
-    APRILTAG
-};
-
-POSE_ESTIM_ALGO preferredAlgorithm = APRILTAG;
 
 float tagsize = 0.1524; // 6 inches -> meters
 float decimate = 0.2f;
 float sigma = 0.0f;
 int nthreads = 2;
 int cameraID = 0;
+int decisionMarginCutoff = 30;
 bool noGUI = false;
 const char *cameraName = "noname";
 
 const double fieldLength = 16.535239036755;
 const double fieldHeight = 8.0137;
 
-static void drawDebugInfo(cv::Mat& frame, apriltag_detection* det) {
+static void drawDebugInfo(cv::Mat &frame, apriltag_detection *det) {
     line(frame, cv::Point(det->p[0][0], det->p[0][1]),
          cv::Point(det->p[1][0], det->p[1][1]),
          cv::Scalar(0, 0xff, 0), 2);
@@ -60,21 +66,22 @@ static void drawDebugInfo(cv::Mat& frame, apriltag_detection* det) {
             fontface, fontscale, cv::Scalar(0xff, 0x99, 0), 2);
 }
 
-static void undistortImage(cv::Mat& frame, cv::Mat cameraMatrix, cv::InputArray distanceCoefficients) {
+static void undistortImage(cv::Mat &frame, cv::Mat cameraMatrix, cv::InputArray distanceCoefficients) {
     cv::Mat temp;
     cv::undistort(frame, temp, cameraMatrix, distanceCoefficients);
     temp.copyTo(frame);
 }
 
 // register perf here
-REGISTER_PERF(total);
-REGISTER_PERF(detection);
-REGISTER_PERF(capture);
-REGISTER_PERF(undistortion);
-REGISTER_PERF(position_estimation);
-REGISTER_PERF(gui_display);
+REGISTER_PERF(total)
+REGISTER_PERF(detection)
+REGISTER_PERF(capture)
+REGISTER_PERF(undistortion)
+REGISTER_PERF(position_estimation)
+REGISTER_PERF(gui_display)
 
 int main(int argc, const char **argv) {
+
     struct argparse_option options[] = {
             OPT_HELP(),
             OPT_FLOAT((char) NULL, "tag-size", (void *) &tagsize,
@@ -88,6 +95,11 @@ int main(int argc, const char **argv) {
                         0),
             OPT_INTEGER((char) NULL, "camera-id", (void *) &cameraID, "The ID of the webcam to use. Defaults to 0",
                         NULL, 0, 0),
+            OPT_INTEGER((char) NULL, "decision-margin-cutoff", (void *) &decisionMarginCutoff,
+                        "The decision margin is a measure of the quality of the binary decoding process: the "
+                        "average difference between the intensity of a data bit versus "
+                        "the decision threshold. Higher numbers roughly indicate better decodes. "
+                        "The cutoff specifies the minimum value for the decision margin", NULL, 0, 0),
             OPT_STRING('n', "name", (void *) &cameraName, "user-defined camera name", NULL, 0, 0),
             OPT_BOOLEAN((char) NULL, "no-gui", (void *) &noGUI, "whether or not to disable GUI output for the program",
                         NULL, 0, 0),
@@ -106,11 +118,8 @@ int main(int argc, const char **argv) {
                       "\nBe sure to run this in the source directory containing the data folder.");
     argc = argparse_parse(&argparse, argc, argv);
 
-    cv::VideoCapture camera(cameraID);
-    if (!camera.isOpened()) {
-        std::cerr << "failed to open camera!!!" << std::endl;
-        std::exit(EXIT_FAILURE);
-    }
+    ThreadedCaptureSystem captureSystem;
+    captureSystem.start(cameraID);
 
     cv::FileStorage fs;
 
@@ -135,209 +144,96 @@ int main(int argc, const char **argv) {
     VisualizationSystem::Texture cameraTexture;
     VisualizationSystem::Texture fieldTexture;
     cv::Mat fieldImageMatDefaultData;
+
+// load field image
+
     if (!noGUI) {
         guiSystem.init();
 
         cameraTexture = guiSystem.createTexture();
         fieldTexture = guiSystem.createTexture();
 
+        cv::Mat temp = cv::imdecode(
+            std::vector<unsigned char>(gFieldImageData, gFieldImageData + gFieldImageSize), cv::IMREAD_UNCHANGED);
+        
 
-        // load field image
-        fieldImageMatDefaultData = cv::imdecode(std::vector<unsigned char>(gFieldImageData, gFieldImageData + gFieldImageSize), cv::IMREAD_UNCHANGED);
+        double scale_percent = 30;
+        int width = (int)(temp.cols * scale_percent / 100);
+        int height = (int)(temp.rows * scale_percent / 100);
+
+        cv::resize(temp, fieldImageMatDefaultData, cv::Size(width, height));
     }
 
-    cv::Mat frame, gray;
-    
-    uint32_t detectedTagsBits = 0;
-    std::vector<cv::Point2d> imagePoints;
-    std::vector<cv::Point3d> objectPoints;
-    std::vector<cv::Point3d> cameraPositionEstimations;
+    cv::Mat frame;
+
+    terminal::initAlternateScreen();
+    terminal::goToCorner();
+
+    std::chrono::high_resolution_clock::time_point lastUpdatedTime;
+    NetworkSystem networkSystem;
+    networkSystem.init();
+    int32_t networkTableLastUpdateTime = nt::Now();
+
+    VideoServer videoServer;
+    bool videoServerInitialized = false; // Initialize on first frame
 
     while (noGUI || !guiSystem.windowShouldClose()) {
-        CLEAR_PERF(total);
-        CLEAR_PERF(detection);
-        CLEAR_PERF(capture);
-        CLEAR_PERF(undistortion);
-        CLEAR_PERF(position_estimation);
-        CLEAR_PERF(gui_display);
+        CLEAR_PERF(total)
+        CLEAR_PERF(detection)
+        CLEAR_PERF(capture)
+        CLEAR_PERF(undistortion)
+        CLEAR_PERF(position_estimation)
+        CLEAR_PERF(gui_display)
 
-        BEGIN_PERF(total);
+        BEGIN_PERF(total)
 
-        BEGIN_PERF(capture);
-        camera.read(frame);
-        END_PERF(capture);
+        BEGIN_PERF(capture)
+        captureSystem.read(frame);
+        networkTableLastUpdateTime = nt::Now();
+        END_PERF(capture)
+
+        if(!videoServerInitialized) {
+            videoServer.init(frame.cols, frame.rows, 1881, "4330_VideoServer");
+            videoServerInitialized = true;
+        }
 
 
-        BEGIN_PERF(undistortion);
+        BEGIN_PERF(undistortion)
         //undistortImage(frame, cameraMatrix, distortionCoefficients);
-        END_PERF(undistortion);
+        END_PERF(undistortion)
 
-        cv::cvtColor(frame, gray, cv::COLOR_BGR2GRAY);
+        BEGIN_PERF(detection)
+        zarray_t* allDetections;
+        int detectedTagBits = 0;
+        std::array<apriltag_detection_t*, 8> detections = runDetection(apriltagDetector, frame, decisionMarginCutoff, &allDetections,
+                     &detectedTagBits);
+        END_PERF(detection)
 
-        image_u8_t imHeader = {
-                .width = gray.cols,
-                .height = gray.rows,
-                .stride = gray.cols,
-                .buf = gray.data
-        };
+        BEGIN_PERF(position_estimation)
+        cv::Point3d position;
+        double theta;
+        runPositionEstimation(detections, detectedTagBits, cameraMatrix, tagsize, &position, &theta);
+        END_PERF(position_estimation)
 
-        BEGIN_PERF(detection);
-        detectedTagsBits = 0;
-        zarray_t *detections = apriltag_detector_detect(apriltagDetector, &imHeader);
-        END_PERF(detection);
+        BEGIN_PERF(gui_display)
+        for(int i = 1; i <= 8; i++) {
+            if(detectedTagBits & (1 << i)) {
+                drawDebugInfo(frame, detections[i- 1]);
+            }
+        }
 
         if (!noGUI) {
             guiSystem.begin();
             ImGui::DockSpaceOverViewport();
         }
+        END_PERF(gui_display);
 
-        // We shouldn't be iterating over more than 8 detections because there are only 8 in the field
-        // In fact, realistically, the number shouldn't be more than 4 as the camera shouldn't have 360 degree vision
-        int numDetections = 0;
-        int currentTagIndex = 0;
-        imagePoints.clear();
-        objectPoints.clear();
-        cameraPositionEstimations.clear();
-        for (int i = 0; i < zarray_size(detections); i++) {
-            apriltag_detection_t *det;
-            zarray_get(detections, i, &det);
-            
-            if(det->id <= 0 || det->id > 8) {
-//                std::cerr << "WARNING: A tag of id " << det->id << " detected but should not be on the game field!" << std::endl;
-                continue;
-            }
-
-            if(det->decision_margin < 30) {
-                continue;
-            }
-
-            if(det->hamming > 0) {
-                std::cout << "sketchy tag of id " << det->id << " discarded" << std::endl;
-            }
-            
-            if(detectedTagsBits & (1 << det->id)) {
-                std::cerr << "WARNING: multiple tags of id " << det->id << " found!" << std::endl;
-                continue;
-            } else {
-                detectedTagsBits |= (1 << det->id);
-            }
-
-            if(preferredAlgorithm == OPENCV) {
-                // the tags between 5 and 8 are all rotated 180 degrees compared to the ones with ids 1 through 4
-                // so we need to account for this my multiplying the y direction offset of the corner from the center by -1
-                int fieldOrientationMultiplier = det->id <= 4 && det->id >= 0 ? 1 : -1;
-                double centerToEdge = inToM(3.0); // perpendicular distance from center of apriltag to edge is 3 inches
-
-                // construct image and object points
-                for (int j = 0; j < 4; j++) {
-                    imagePoints.emplace_back();
-                    objectPoints.emplace_back();
-                }
-
-                imagePoints[currentTagIndex * 4 + 0] = cv::Point2d(det->p[0][0], det->p[0][1]);
-                objectPoints[currentTagIndex * 4 + 0] = aprilTagFieldPoints[det->id] +
-                                                        cv::Point3d(0.0, fieldOrientationMultiplier * centerToEdge,
-                                                                      -centerToEdge);
-                imagePoints[currentTagIndex * 4 + 1] = cv::Point2d(det->p[1][0], det->p[1][1]);
-                objectPoints[currentTagIndex * 4 + 1] = aprilTagFieldPoints[det->id] +
-                                                        cv::Point3d(0.0, -fieldOrientationMultiplier * centerToEdge,
-                                                                      -centerToEdge);
-                imagePoints[currentTagIndex * 4 + 2] = cv::Point2d(det->p[2][0], det->p[2][1]);
-                objectPoints[currentTagIndex * 4 + 2] = aprilTagFieldPoints[det->id] +
-                                                        cv::Point3d(0.0, -fieldOrientationMultiplier * centerToEdge,
-                                                                      centerToEdge);
-                imagePoints[currentTagIndex * 4 + 3] = cv::Point2d(det->p[3][0], det->p[3][1]);
-                objectPoints[currentTagIndex * 4 + 3] = aprilTagFieldPoints[det->id] +
-                                                        cv::Point3d(0.0, fieldOrientationMultiplier * centerToEdge,
-                                                                      centerToEdge);
-            } else if(preferredAlgorithm == APRILTAG) {
-                BEGIN_PERF(position_estimation);
-                apriltag_detection_info_t info;
-                info.det = det;
-                info.tagsize = tagsize;
-                info.fx = cameraMatrix.at<double>(0, 0);
-                info.fy = cameraMatrix.at<double>(1, 1);
-                info.cx = cameraMatrix.at<double>(0, 2);
-                info.cy = cameraMatrix.at<double>(1, 2);
-
-
-                apriltag_pose_t pose;
-                double err = estimate_tag_pose(&info, &pose);
-
-                cv::Mat RMat = cv::Mat(pose.R->nrows, pose.R->ncols, CV_64F, pose.R->data);
-                cv::Mat tVec = cv::Mat(pose.t->nrows, pose.t->ncols, CV_64F, pose.t->data);
-
-                cv::Mat objToCam = cv::Mat::eye(4, 4, CV_64F);
-                for(int i = 0; i < 3; i++) {
-                    for(int j = 0; j < 3; j++) {
-                        objToCam.at<double>(i, j) = RMat.at<double>(i, j);
-                    }
-                }
-
-                for(int i = 0; i < 3; i++) {
-                    objToCam.at<double>(i, 3) = tVec.at<double>(0, i);
-                }
-
-
-                cv::Mat objToField = cv::Mat::eye(4, 4, CV_64F);
-                objToField.at<double>(0, 3) = aprilTagFieldPoints[det->id].x;
-                if(det->id >= 0 && det->id <= 4) {
-                    objToField.at<double>(0, 0) *= -1; // Equivalent of a 180 degree rotation
-                }
-                objToField.at<double>(1, 3) = aprilTagFieldPoints[det->id].y;
-                objToField.at<double>(2, 3) = aprilTagFieldPoints[det->id].z;
-
-                cv::Mat camPos = objToCam * cv::Matx41d(0.0, 0.0, 0.0, 1.0);
-                std::swap(camPos.at<double>(0, 1), camPos.at<double>(0, 2)); // swap y and z
-                std::swap(camPos.at<double>(0, 0), camPos.at<double>(0, 1)); // swap x and y
-                camPos = objToField * camPos;
-                cameraPositionEstimations.emplace_back(camPos.at<double>(0, 0), camPos.at<double>(0, 1), camPos.at<double>(0, 2));
-                END_PERF(position_estimation);
-            }
-
-            if(!noGUI) {
-                drawDebugInfo(frame, det);
-            }
-            currentTagIndex++;
-            numDetections++;
-        }
-
-
-        cv::Mat rvec, tvec;
-        cv::Mat cameraPosition(1, 3, CV_64F);
         cv::Mat fieldImageAnnotated;
+        int numDetections = __builtin_popcount(detectedTagBits);
+        cv::Mat cameraPosition(position);
 
-        if(numDetections > 0) {
-            if(preferredAlgorithm == OPENCV) {
-                cv::solvePnPRansac(objectPoints, imagePoints, cameraMatrix, distortionCoefficients, rvec, tvec);
-                std::vector<cv::Point2d> outPoints;
-                cv::projectPoints(objectPoints, rvec, tvec, cameraMatrix, distortionCoefficients, outPoints);
-
-                cv::Mat rotMat;
-                cv::Rodrigues(rvec, rotMat);
-                cameraPosition = -rotMat.inv() * tvec;
-
-                if (!noGUI) {
-                    int pointIndex = 0;
-                    for (auto &point: outPoints) {
-                        cv::circle(frame, point, 5, cv::Scalar(0, 0, 0xff), -1);
-                        cv::putText(frame, std::to_string(pointIndex), point, cv::FONT_HERSHEY_COMPLEX, 1.0f,
-                                    cv::Scalar(0, 0xff, 0));
-                        pointIndex++;
-                    }
-                }
-            } else if(preferredAlgorithm == APRILTAG) {
-                cv::Point3d positionEstimationsSum(0.0, 0.0, 0.0);
-                for(auto& position : cameraPositionEstimations) {
-                    positionEstimationsSum += position;
-                }
-
-                cv::Point3d averagePosition = positionEstimationsSum / (double)cameraPositionEstimations.size();
-                cameraPosition.at<double>(0, 0) = averagePosition.x;
-                cameraPosition.at<double>(0, 1) = averagePosition.y;
-                cameraPosition.at<double>(0, 2) = averagePosition.z;
-            }
-        }
+        networkSystem.update(cv::Point2d(position.x, position.y), theta, networkTableLastUpdateTime);
+        videoServer.write(frame);
 
         if (!noGUI) {
             BEGIN_PERF(gui_display);
@@ -348,7 +244,7 @@ int main(int argc, const char **argv) {
 
             ImGui::Begin("Field Diagram");
             fieldImageMatDefaultData.copyTo(fieldImageAnnotated);
-            if(numDetections) {
+            if (numDetections) {
                 // draw the robot's position
                 int imageWidth = fieldImageAnnotated.cols;
                 int imageHeight = fieldImageAnnotated.rows;
@@ -359,7 +255,7 @@ int main(int argc, const char **argv) {
                 std::stringstream stringstream;
                 stringstream << cv::Point(xPosition, yPosition);
                 ImGui::Text("%s", stringstream.str().c_str());
-                cv::circle(fieldImageAnnotated, cv::Point(xPosition, yPosition), 20, cv::Scalar(0xff, 0, 0xff), -1);
+                cv::circle(fieldImageAnnotated, cv::Point(xPosition, yPosition), 5, cv::Scalar(0xff, 0, 0xff), -1);
 
             }
             guiSystem.updateTexture(&fieldTexture, fieldImageAnnotated);
@@ -368,46 +264,47 @@ int main(int argc, const char **argv) {
 
             ImGui::Begin("Settings");
             bool settingsModified = false;
-            if(ImGui::SliderFloat("quad-decimate", &decimate, 0.0f, 1.0f)) {
+            if (ImGui::SliderFloat("quad-decimate", &decimate, 0.0f, 1.0f)) {
                 settingsModified = true;
                 apriltagDetector->quad_decimate = decimate;
             }
 
-            if(ImGui::SliderFloat("sigma", &sigma, 0.0f, 1.0f)) {
-               settingsModified = true;
-               apriltagDetector->quad_sigma = sigma;
+            if (ImGui::SliderFloat("sigma", &sigma, 0.0f, 1.0f)) {
+                settingsModified = true;
+                apriltagDetector->quad_sigma = sigma;
             }
             ImGui::End();
 
             ImGui::Begin("Camera Position Estimation");
-            if(numDetections) {
+            if (numDetections) {
                 std::stringstream ss;
                 ss << cameraPosition * 39.3701;
 
                 ImGui::Text("%s", ss.str().c_str());
             }
+            ImGui::Text("angle: %f degrees", theta * (180 / M_PI));
             ImGui::End();
 
             guiSystem.end();
-            END_PERF(gui_display);
+            END_PERF(gui_display)
         }
 
-        apriltag_detections_destroy(detections);
+        apriltag_detections_destroy(allDetections);
 
+        END_PERF(total)
+        terminal::clear();
 
+        std::cout << "position: " << position * 39.3701 << std::endl;
+        std::cout << "rotation: " << theta * (180.0 / M_PI) << " deg" << std::endl;
 
-        if (cv::waitKey(1) == 'q') {
-            break;
-        }
-
-        END_PERF(total);
-        PRINT_PERF(total);
-        PRINT_PERF(detection);
-        PRINT_PERF(capture);
-        PRINT_PERF(undistortion);
-        PRINT_PERF(position_estimation);
-        PRINT_PERF(gui_display);
+        PRINT_PERF(total)
+        PRINT_PERF(detection)
+        PRINT_PERF(capture)
+        // PRINT_PERF(undistortion)
+        PRINT_PERF(position_estimation)
+        PRINT_PERF(gui_display)
     }
+    terminal::exitAlternateScreen();
 
     if (!noGUI) {
         guiSystem.destruct();

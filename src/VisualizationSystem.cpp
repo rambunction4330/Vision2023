@@ -7,8 +7,7 @@
 #include <iostream>
 #include <opencv2/opencv.hpp>
 
-static void glfw_error_callback(int error, const char* description)
-{
+static void glfw_error_callback(int error, const char *description) {
     fprintf(stderr, "Glfw Error %d: %s\n", error, description);
 }
 
@@ -19,9 +18,8 @@ void VisualizationSystem::init() {
         std::cerr << "failed to initialize GLFW!" << std::endl;
         exit(1);
     }
-
     // Decide GL+GLSL versions
-#if defined(IMGUI_IMPL_OPENGL_ES2)
+#if defined(VISION_GUI_OPENGL_ES2)
     // GL ES 2.0 + GLSL 100
     const char* glsl_version = "#version 100";
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 2);
@@ -29,7 +27,7 @@ void VisualizationSystem::init() {
     glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_ES_API);
 #elif defined(__APPLE__)
     // GL 3.2 + GLSL 150
-    const char* glsl_version = "#version 150";
+    const char *glsl_version = "#version 150";
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);  // 3.2+ only
@@ -44,7 +42,7 @@ void VisualizationSystem::init() {
 #endif
 
     // Create window with graphics context
-    m_window = glfwCreateWindow(1280, 720, "Dear ImGui GLFW+OpenGL3 example", NULL, NULL);
+    m_window = glfwCreateWindow(1280, 720, "Vision", NULL, NULL);
     if (m_window == NULL) {
         std::cerr << "failed to create GLFW window!" << std::endl;
         exit(1);
@@ -52,8 +50,7 @@ void VisualizationSystem::init() {
     glfwMakeContextCurrent(m_window);
     glfwSwapInterval(1); // Enable vsync
 
-    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
-    {
+    if (!gladLoadGLLoader((GLADloadproc) glfwGetProcAddress)) {
         std::cout << "Failed to initialize GLAD" << std::endl;
         exit(EXIT_FAILURE);
     }
@@ -61,7 +58,8 @@ void VisualizationSystem::init() {
     // Setup Dear ImGui context
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
-    ImGuiIO& io = ImGui::GetIO(); (void)io;
+    ImGuiIO &io = ImGui::GetIO();
+    (void) io;
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
     io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
     //io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
@@ -117,7 +115,7 @@ VisualizationSystem::Texture VisualizationSystem::createTexture() {
     return texture;
 }
 
-void VisualizationSystem::updateTexture(VisualizationSystem::Texture *texture, const cv::Mat& image) {
+void VisualizationSystem::updateTexture(VisualizationSystem::Texture *texture, const cv::Mat &image) {
     cv::Mat rgbTemp;
     cv::cvtColor(image, rgbTemp, cv::COLOR_BGR2RGB);
 
@@ -133,10 +131,12 @@ void VisualizationSystem::updateTexture(VisualizationSystem::Texture *texture, c
                      GL_RGB,              // Input image format (i.e. GL_RGB, GL_RGBA, GL_BGR etc.)
                      GL_UNSIGNED_BYTE,    // Image data type
                      rgbTemp.ptr());        // The actual image data itself
+        texture->width = rgbTemp.cols;
+        texture->height = rgbTemp.rows;
     } else {
         glTexSubImage2D(GL_TEXTURE_2D,
                         0,
-                        GL_RGB,
+                        0,
                         0,
                         rgbTemp.cols,
                         rgbTemp.rows,
@@ -147,7 +147,7 @@ void VisualizationSystem::updateTexture(VisualizationSystem::Texture *texture, c
     }
 }
 
-void VisualizationSystem::destroyTexture(VisualizationSystem::Texture* texture) {
+void VisualizationSystem::destroyTexture(VisualizationSystem::Texture *texture) {
     glDeleteTextures(1, &texture->ID);
 }
 
