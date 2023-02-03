@@ -9,6 +9,7 @@
 #include <opencv2/imgproc.hpp>
 #include <opencv2/opencv.hpp>
 #include <apriltag.h>
+#include "VideoServer.h"
 #include "tag16h5.h"
 
 #include "argparse.h"
@@ -173,6 +174,9 @@ int main(int argc, const char **argv) {
     networkSystem.init();
     int32_t networkTableLastUpdateTime = nt::Now();
 
+    VideoServer videoServer;
+    bool videoServerInitialized = false; // Initialize on first frame
+
     while (noGUI || !guiSystem.windowShouldClose()) {
         CLEAR_PERF(total)
         CLEAR_PERF(detection)
@@ -184,17 +188,14 @@ int main(int argc, const char **argv) {
         BEGIN_PERF(total)
 
         BEGIN_PERF(capture)
-//         while(captureSystem.getLastUpdatedTime() <= lastUpdatedTime) {
-// #ifndef __arm__
-//             __builtin_ia32_pause();
-// #else
-//             __asm__ __volatile__("yield");
-// #endif
-//         }
-//         lastUpdatedTime = captureSystem.getLastUpdatedTime();
         captureSystem.read(frame);
         networkTableLastUpdateTime = nt::Now();
         END_PERF(capture)
+
+        if(!videoServerInitialized) {
+            videoServer.init(frame.cols, frame.rows, 1881, "4330_VideoServer");
+            videoServerInitialized = true;
+        }
 
 
         BEGIN_PERF(undistortion)
@@ -232,6 +233,7 @@ int main(int argc, const char **argv) {
         cv::Mat cameraPosition(position);
 
         networkSystem.update(cv::Point2d(position.x, position.y), theta, networkTableLastUpdateTime);
+        videoServer.write(frame);
 
         if (!noGUI) {
             BEGIN_PERF(gui_display);
@@ -288,11 +290,6 @@ int main(int argc, const char **argv) {
         }
 
         apriltag_detections_destroy(allDetections);
-
-
-        if (cv::waitKey(1) == 'q') {
-            break;
-        }
 
         END_PERF(total)
         terminal::clear();

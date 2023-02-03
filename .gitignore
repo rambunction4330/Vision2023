@@ -38,3 +38,5 @@ cmake-build-release
 data/calibrations/*
 data/images/*
 .cache
+
+compile_commands.json

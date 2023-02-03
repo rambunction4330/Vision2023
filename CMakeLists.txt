@@ -23,7 +23,7 @@ add_executable(vision
     src/NetworkSystem.cpp
     src/VideoServer.cpp
     )
-target_link_libraries(vision PUBLIC ${OpenCV_LIBS} apriltag argparse ntcore cscore)
+target_link_libraries(vision PUBLIC ${OpenCV_LIBS} apriltag argparse ntcore cscore cameraserver)
 target_include_directories(vision PUBLIC ${OpenCV_INCLUDE_DIRS} src)
 
 if(IS_RPI)

@@ -5,17 +5,15 @@
 #include <iostream>
 #include "ThreadedCaptureSystem.h"
 #include <chrono>
+#include <unistd.h>
 
 ThreadedCaptureSystem::~ThreadedCaptureSystem() {
     stop();
 }
 
 void ThreadedCaptureSystem::start(int port) {
-    camera.open(port);
-
-    if(!camera.isOpened()) {
-        std::cout << "failed to open camera!" << std::endl;
-        std::exit(EXIT_FAILURE);
+    while(!camera.isOpened()) {
+        camera.open(port);
     }
 
     thread = std::thread(&ThreadedCaptureSystem::run, this);
