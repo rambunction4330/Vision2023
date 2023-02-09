@@ -21,9 +21,22 @@ ninja
 ninja install
 ```
 
+#### WPILib
+This is required for the networking and camera server utility libraries. Because only these two are needed, you can exclude everything else from the build to save time.
+
+```bash
+cmake .. -GNinja -DWITH_JAVA=OFF -DWITH_WPILIB=OFF -DWITH_SIMULATION_MODULES=OFF -DWITH_WPIMATH=OFF -DWITH_EXAMPLES=OFF -DWITH_TESTS=OFF -DWITH_GUI=OFF
+ninja
+ninja install
+```
+
+**NOTE:** If you decide to install this to a nonstandard prefix, make sure to set `CMAKE_PREFIX_PATH` to the path with all of the `libraryname/*.cmake" files in your installation directory so that cmake can find them.
+
 ### Building this program
 ```bash
 mkdir build && cd build
-cmake .. -GNinja -DOpenCV_DIR=<where_you_installed_opencv>/lib/cmake/opencv4
+cmake .. -GNinja -DOpenCV_DIR=<where_you_installed_opencv>/lib/cmake/opencv4 -DCMAKE_PREFIX_PATH=<where_you_installed_wpilib>
 ninja
 ```
+
+If you are on a raspberry pi (or any arm-based board), be sure to add the flag `-DIS_RPI=ON` which will enable some arm-cpu-only features.
