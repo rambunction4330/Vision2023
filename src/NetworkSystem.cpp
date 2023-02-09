@@ -11,5 +11,5 @@ void NetworkSystem::init() {
 
 void NetworkSystem::update(cv::Point2d point, double theta, int64_t time) {
     const double array[] = {point.x, point.y, theta};
-    poseEntry.Set(array);
+    poseEntry.Set(array, time);
 }

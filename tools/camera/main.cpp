@@ -7,6 +7,7 @@
 
 #include <argparse.h>
 #include <chrono>
+#include <opencv2/videoio.hpp>
 
 bool noGUI = false;
 bool printPerf = false;
@@ -30,13 +31,25 @@ int main(int argc, const char **argv) {
                       "\nBe sure to run this in the source directory containing the data folder. Press a to take a photo and q to quit");
     argc = argparse_parse(&argparse, argc, argv);
 
-    cv::VideoCapture camera = cv::VideoCapture(0);
+    cv::VideoCapture camera = cv::VideoCapture(
+            0, 
+#ifdef __linux__
+            cv::CAP_V4L
+#endif
+        );
+
+#ifdef __linux__
+    camera.set(cv::CAP_PROP_EXPOSURE, 3);
+#endif
+
     if (!camera.isOpened()) {
         std::cerr << "failed to open webcam!!!" << std::endl;
         exit(-1);
     }
 
-    cv::namedWindow("camera");
+    if(!noGUI) {
+        cv::namedWindow("camera");
+    }
 
     int imageNum = 0;
     while (true) {

@@ -5,6 +5,7 @@
 
 #include <iostream>
 
+#include <limits>
 #include <ntcore_cpp.h>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/opencv.hpp>
@@ -211,7 +212,7 @@ int main(int argc, const char **argv) {
 
         BEGIN_PERF(position_estimation)
         cv::Point3d position;
-        double theta;
+        double theta = std::numeric_limits<double>::min();
         runPositionEstimation(detections, detectedTagBits, cameraMatrix, tagsize, &position, &theta);
         END_PERF(position_estimation)
 

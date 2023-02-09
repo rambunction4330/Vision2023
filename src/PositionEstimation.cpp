@@ -67,6 +67,11 @@ void runPositionEstimation(const std::array<apriltag_detection_t *, 8>& detectio
         double r33 = RMat.at<double>(2, 2);
 
         double currentTheta = std::atan2(-r31, std::sqrt(r32 * r32 + r33 * r33));
+	currentTheta *= -1; // Field angles are inverted
+        if(det->id >= 5 && det->id <= 8) {
+            currentTheta += M_PI; // rotate by 180 degrees to convert from object relative angles to field angles
+        }
+
         angles[currentPositiveDetectionIndex] = currentTheta;
 
         currentPositiveDetectionIndex++;
@@ -82,7 +87,10 @@ void runPositionEstimation(const std::array<apriltag_detection_t *, 8>& detectio
         for (auto currentTheta : angles) {
             thetaSum += currentTheta;
         }
+
+        // average all of the angles
         *theta = thetaSum / (double)currentPositiveDetectionIndex;
+
 
         cv::Point3d averagePosition = positionEstimationsSum / (double) currentPositiveDetectionIndex;
         *position = cv::Point3d(averagePosition);
