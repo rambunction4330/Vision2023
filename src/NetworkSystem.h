@@ -15,6 +15,7 @@ public:
 
     void init();
     void update(cv::Point2d point, double theta, int64_t time);
+    void addCamera(int port, const std::string& addr);
 
 private:
     nt::NetworkTableInstance instance;

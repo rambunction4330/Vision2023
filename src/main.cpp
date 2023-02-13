@@ -194,6 +194,7 @@ int main(int argc, const char **argv) {
         END_PERF(capture)
 
         if(!videoServerInitialized) {
+	    networkSystem.addCamera(1881, "raspberrypi.local");
             videoServer.init(frame.cols, frame.rows, 1881, "4330_VideoServer");
             videoServerInitialized = true;
         }
@@ -233,7 +234,9 @@ int main(int argc, const char **argv) {
         int numDetections = __builtin_popcount(detectedTagBits);
         cv::Mat cameraPosition(position);
 
-        networkSystem.update(cv::Point2d(position.x, position.y), theta, networkTableLastUpdateTime);
+	if(numDetections) {
+            networkSystem.update(cv::Point2d(position.x, position.y), theta, networkTableLastUpdateTime);
+	}
         videoServer.write(frame);
 
         if (!noGUI) {
@@ -301,6 +304,7 @@ int main(int argc, const char **argv) {
         PRINT_PERF(total)
         PRINT_PERF(detection)
         PRINT_PERF(capture)
+	std::cout << "numDetections: " << numDetections << std::endl;
         // PRINT_PERF(undistortion)
         PRINT_PERF(position_estimation)
         PRINT_PERF(gui_display)
