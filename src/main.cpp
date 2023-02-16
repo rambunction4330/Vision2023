@@ -173,7 +173,7 @@ int main(int argc, const char **argv) {
     std::chrono::high_resolution_clock::time_point lastUpdatedTime;
     NetworkSystem networkSystem;
     networkSystem.init();
-    int32_t networkTableLastUpdateTime = nt::Now();
+    int64_t networkTableLastUpdateTime = nt::Now();
 
     VideoServer videoServer;
     bool videoServerInitialized = false; // Initialize on first frame
@@ -305,6 +305,7 @@ int main(int argc, const char **argv) {
         PRINT_PERF(detection)
         PRINT_PERF(capture)
 	std::cout << "numDetections: " << numDetections << std::endl;
+	std::cout << "last updated: " << networkTableLastUpdateTime << std::endl;
         // PRINT_PERF(undistortion)
         PRINT_PERF(position_estimation)
         PRINT_PERF(gui_display)
