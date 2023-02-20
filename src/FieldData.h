@@ -8,6 +8,7 @@
 #include <opencv2/opencv.hpp>
 
 extern const cv::Point3d aprilTagFieldPoints[];
+extern const cv::Point3d cameraDisplacementFromRobotCenter;
 
 static inline double inchesToMeters(double in) {
     return in * 0.0254;

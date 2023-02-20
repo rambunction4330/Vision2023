@@ -3,8 +3,11 @@
 //
 
 #include "Detection.h"
+#include "perf.h"
 
 static cv::Mat gray;
+
+REGISTER_PERF(detection_external)
 
 /**
  *
@@ -30,9 +33,11 @@ runDetection(apriltag_detector_t* apriltagDetector, cv::Mat& frame, int decision
             .buf = gray.data
     };
 
+    BEGIN_PERF (detection_external);
     *detectedTagsBits = 0;
     zarray_t* detections = apriltag_detector_detect(apriltagDetector, &imHeader);
     *allOutputDetections = detections;
+    END_PERF(detection_external);
 
 
     // We shouldn't be iterating over more than 8 detections because there are only 8 in the field

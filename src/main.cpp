@@ -5,6 +5,7 @@
 
 #include <iostream>
 
+#include <limits>
 #include <ntcore_cpp.h>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/opencv.hpp>
@@ -172,7 +173,7 @@ int main(int argc, const char **argv) {
     std::chrono::high_resolution_clock::time_point lastUpdatedTime;
     NetworkSystem networkSystem;
     networkSystem.init();
-    int32_t networkTableLastUpdateTime = nt::Now();
+    int64_t networkTableLastUpdateTime = nt::Now();
 
     VideoServer videoServer;
     bool videoServerInitialized = false; // Initialize on first frame
@@ -193,6 +194,7 @@ int main(int argc, const char **argv) {
         END_PERF(capture)
 
         if(!videoServerInitialized) {
+	    networkSystem.addCamera(1881, "raspberrypi.local");
             videoServer.init(frame.cols, frame.rows, 1881, "4330_VideoServer");
             videoServerInitialized = true;
         }
@@ -211,7 +213,7 @@ int main(int argc, const char **argv) {
 
         BEGIN_PERF(position_estimation)
         cv::Point3d position;
-        double theta;
+        double theta = std::numeric_limits<double>::min();
         runPositionEstimation(detections, detectedTagBits, cameraMatrix, tagsize, &position, &theta);
         END_PERF(position_estimation)
 
@@ -232,7 +234,9 @@ int main(int argc, const char **argv) {
         int numDetections = __builtin_popcount(detectedTagBits);
         cv::Mat cameraPosition(position);
 
-        networkSystem.update(cv::Point2d(position.x, position.y), theta, networkTableLastUpdateTime);
+	if(numDetections) {
+            networkSystem.update(cv::Point2d(position.x, position.y), theta, networkTableLastUpdateTime);
+	}
         videoServer.write(frame);
 
         if (!noGUI) {
@@ -300,6 +304,8 @@ int main(int argc, const char **argv) {
         PRINT_PERF(total)
         PRINT_PERF(detection)
         PRINT_PERF(capture)
+	std::cout << "numDetections: " << numDetections << std::endl;
+	std::cout << "last updated: " << networkTableLastUpdateTime << std::endl;
         // PRINT_PERF(undistortion)
         PRINT_PERF(position_estimation)
         PRINT_PERF(gui_display)

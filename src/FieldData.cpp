@@ -16,3 +16,5 @@ extern const cv::Point3d aprilTagFieldPoints[] = {
         cv::Point3d(inToM(40.45), inToM(108.19), inToM(18.22)), // ID = 7
         cv::Point3d(inToM(40.45), inToM(42.19), inToM(18.22)), // ID = 8
 };
+
+extern const cv::Point3d cameraDisplacementFromRobotCenter{inToM(5.5), inToM(9.5), inToM(15.5)};
